@@ -1,0 +1,10 @@
+{
+  "name": "Fulbito FC",
+  "short_name": "Fulbito FC",
+  "description": "Campeonatos, tablas, cuadros y estadísticas",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b1526",
+  "theme_color": "#0b1526",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

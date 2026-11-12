@@ -1,0 +1,243 @@
+/* Fulbito FC: piezas propias (tablas, fechas, cuadro, campeones) con la estética "Cancha arcade"
+   de Piel Morena. Se suma a style.css y style-pixel.css. */
+.brand { color: inherit; text-decoration: none; }
+.error { color: var(--danger); margin: 4px 0; }
+.error:empty { display: none; }
+.field-lbl { margin: 8px 0 6px; font-size: .85rem; color: var(--muted); }
+.checks { display: flex; flex-wrap: wrap; }
+.season-field { width: 110px; }
+.wrap-seg { flex-wrap: wrap; display: flex; }
+.wrap-row { flex-wrap: wrap; overflow: visible; }
+
+/* Escudo + nombre */
+.team-tag { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.team-tag .crest { filter: none; }
+.team-name { overflow-wrap: anywhere; }
+.team-tag.tbd { color: var(--muted); font-style: italic; }
+.crest-tbd { display: inline-grid; place-items: center; width: 22px; height: 26px; border: 2px dashed var(--line); border-radius: 4px 4px 10px 10px; font-size: .8rem; }
+
+/* Selector de campeonato */
+.tour-chips .chip-btn.add { border-style: dashed; }
+.tour-head .tag { margin-right: 4px; }
+.champ-line { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; color: var(--gold); }
+
+/* Tabla de posiciones */
+.standings .pos { width: 28px; color: var(--muted); }
+.standings .team-col { text-align: left; min-width: 150px; }
+.standings .pts b { color: var(--gold); }
+.standings tr.zone-ko td.pos { box-shadow: inset 4px 0 0 var(--ok); color: var(--text); }
+.standings tr.zone-champ td.pos { box-shadow: inset 4px 0 0 var(--gold); color: var(--gold); }
+.zone-dot { display: inline-block; width: 12px; height: 12px; vertical-align: middle; }
+.zone-dot.ko { background: var(--ok); }
+.group-box { margin-bottom: 6px; }
+
+/* Fechas */
+.round-nav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; margin-bottom: 6px; }
+.round-label { text-align: center; color: var(--gold); }
+.match-list { display: grid; gap: 6px; }
+.match-row {
+  width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 56px;
+  padding: 6px 10px; border-radius: 10px; background: var(--card-2); color: var(--text); border: 2px solid var(--edge, var(--line));
+  font-weight: 400; text-transform: none; letter-spacing: 0; box-shadow: none;
+}
+.match-row:hover:not(:disabled) { border-color: var(--gold); }
+.match-row:disabled { opacity: 1; cursor: default; }
+.mr-team { min-width: 0; display: flex; }
+.mr-team.home { justify-content: flex-end; text-align: right; }
+.mr-team.home .team-tag { flex-direction: row-reverse; }
+.mr-team.away { justify-content: flex-start; text-align: left; }
+.mr-score { min-width: 64px; text-align: center; font-weight: 800; font-size: 1.3rem; color: var(--gold); }
+.mr-when { min-width: 64px; text-align: center; color: var(--muted); font-size: .85rem; }
+.match-row.pending .mr-when { background: var(--solid); border-radius: 6px; padding: 2px 6px; }
+
+/* Hoja de partido */
+.scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; }
+.sc-side { display: grid; justify-items: center; gap: 6px; text-align: center; min-width: 0; }
+.sc-name { overflow-wrap: anywhere; font-size: .95rem; }
+.sc-sep { font-size: 2rem; color: var(--gold); }
+.stepper output { min-width: 28px; text-align: center; font-weight: 800; }
+.stepper.big output { font-size: 2.2rem; color: var(--gold); min-width: 40px; }
+.stepper .step-btn { min-width: 36px; padding: 0 8px; }
+.stepper.big .step-btn { width: 44px; min-height: 44px; font-size: 1.4rem; }
+.pens { margin: 8px 0; }
+.pens-row { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; }
+.small-note.warn { color: var(--danger); }
+.roster-side { margin-top: 12px; }
+.roster-title { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--gold); }
+.mlist { list-style: none; margin: 0; padding: 0; }
+.mrow { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.mrow-head { display: flex; align-items: center; gap: 8px; }
+.mrow-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.mini-lbl { font-size: 1.1rem; }
+.ev-toggle {
+  min-width: 44px; min-height: 40px; padding: 0 8px; font-size: 1.15rem; background: var(--solid); color: var(--text);
+  border: 2px solid var(--line); opacity: .55; filter: grayscale(.7);
+}
+.ev-toggle.on { opacity: 1; filter: none; border-color: var(--gold); background: color-mix(in srgb, var(--gold) 25%, var(--solid)); }
+.ev-toggle.played.on { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 22%, var(--solid)); }
+.sticky-actions { position: sticky; bottom: -20px; margin: 10px -16px -20px; padding: 10px 16px; background: var(--card-solid); border-top: 2px solid var(--edge, var(--line)); z-index: 5; }
+
+/* Cuadro */
+.bracket { display: grid; gap: 12px; }
+@media (min-width: 720px) { .bracket { grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); overflow-x: auto; align-items: center; } }
+.ko-round { display: grid; gap: 8px; align-content: center; }
+.ko-card {
+  width: 100%; display: grid; justify-content: stretch; align-items: stretch; gap: 4px; padding: 8px 10px; border-radius: 10px; background: var(--card); color: var(--text);
+  border: 3px solid var(--edge, var(--line)); box-shadow: 4px 4px 0 rgba(0, 0, 0, .4); text-align: left;
+  font-weight: 400; text-transform: none; letter-spacing: 0;
+}
+button.ko-card:hover:not(:disabled) { border-color: var(--gold); }
+.ko-card:disabled { opacity: 1; cursor: default; }
+.ko-card.tbd, .ko-card.bye { opacity: .8; }
+.ko-side { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; }
+.ko-side.winner { color: var(--gold); font-weight: 700; }
+.ko-side.loser { opacity: .6; }
+.ko-goals { min-width: 36px; text-align: right; font-size: 1.15rem; }
+.ko-when { font-size: .85rem; }
+.third-title { margin-top: 8px; }
+
+/* Campeón */
+.champion, .champ-big { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.champion { background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 22%, var(--card)), var(--card)); border-color: var(--gold) !important; }
+.champ-kicker { color: var(--gold); margin: 0; }
+.champ-name { font-size: 1.2rem; text-align: center; }
+.champ-big { width: 100%; justify-items: center; }
+.aw-who { align-items: center; }
+.aw-who .more { padding: 0 6px; }
+.runner { display: inline-flex; align-items: center; gap: 6px; margin: 4px 8px; }
+.champ-card.done { border-color: var(--gold-d, var(--gold)); }
+.award-line { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+.aw-ico { font-size: 1.3rem; }
+.aw-who { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.aw-val { color: var(--gold); white-space: nowrap; }
+.palmares li { min-height: 48px; }
+
+/* Equipos */
+.team-grid { margin-bottom: 12px; }
+.tcard .crest { grid-row: 1 / span 2; }
+.titles { color: var(--gold); }
+.form-dots { display: inline-flex; gap: 3px; margin-top: 4px; }
+.form-dots .res { width: 20px; height: 20px; font-size: .65rem; border-radius: 5px; }
+.club-head { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+.crest-preview { flex: none; display: grid; place-items: center; width: 100px; min-height: 110px; }
+.team-line { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.pod-team { display: inline-flex; align-items: center; gap: 4px; font-size: .8rem; color: var(--muted); margin-top: 2px; }
+.pod-team .crest { filter: none; }
+.player-sheet .player-head .pname { font-size: 1.1rem; }
+.player-form .face-row .face-pill { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Pixel: tipografías y bordes como Piel Morena */
+[data-theme="pixel"] .mr-score { font-family: var(--font-body); font-size: 28px; }
+[data-theme="pixel"] .mr-when { font-size: 16px; }
+[data-theme="pixel"] .round-label { font-size: 10px; }
+[data-theme="pixel"] .stepper.big output { font-family: var(--font-body); font-size: 40px; }
+[data-theme="pixel"] .sc-sep { font-family: var(--font-body); font-size: 40px; }
+[data-theme="pixel"] .ko-goals { font-family: var(--font-body); font-size: 24px; }
+[data-theme="pixel"] .ev-toggle { box-shadow: none; text-transform: none; border-radius: 6px; }
+/* Filas de partido y cruces son botones: sin el dorado ni las mayúsculas de los botones pixel. */
+[data-theme="pixel"] .match-row, [data-theme="pixel"] .ko-card {
+  font-family: var(--font-body); font-size: 19px; border-radius: 8px; text-transform: none; letter-spacing: 0;
+  color: var(--text); border: 2px solid var(--edge); box-shadow: 3px 3px 0 rgba(0, 0, 0, .4);
+}
+[data-theme="pixel"] .match-row { background: var(--card-2); }
+[data-theme="pixel"] .ko-card { background: var(--card); border-width: 3px; }
+[data-theme="pixel"] .match-row:hover:not(:disabled), [data-theme="pixel"] .ko-card:hover:not(:disabled) { border-color: var(--gold); }
+[data-theme="pixel"] .ev-toggle { background: var(--solid); color: var(--text); }
+/* Nada puede ensanchar la página: lo ancho se acomoda o scrollea adentro de su panel. */
+#main { min-width: 0; overflow-x: clip; }
+.card, .group-box, .rounds { min-width: 0; max-width: 100%; }
+[data-theme="pixel"] .champ-name { font-family: var(--font-pixel); font-size: 12px; line-height: 1.7; }
+[data-theme="pixel"] .champ-kicker { font-family: var(--font-pixel); font-size: 9px; }
+[data-theme="pixel"] .crest-tbd { border-radius: 0; }
+[data-theme="pixel"] .form-dots .res { border-radius: 0; font-size: 7px; }
+[data-theme="pixel"] .sticky-actions { border-top-width: 2px; }
+[data-theme="pixel"] .standings .team-col { font-family: var(--font-body); }
+[data-theme="pixel"] .field-lbl { font-size: 17px; }
+[data-theme="pixel"] .pod-team { font-size: 15px; }
+[data-theme="pixel"] .aw-val { font-family: var(--font-body); font-size: 22px; }
+
+/* Celular */
+@media (max-width: 719px) {
+  .standings .team-col { min-width: 0; width: 120px; max-width: 120px; white-space: normal; }
+  .standings .team-name { font-size: .9em; line-height: 1.1; }
+  .match-row { grid-template-columns: 1fr auto 1fr; padding: 6px; gap: 4px; }
+  .match-row .team-tag { gap: 4px; }
+  .match-row .team-name { font-size: .9em; line-height: 1.1; }
+  .mr-score, .mr-when { min-width: 52px; }
+  .award-line { grid-template-columns: auto 1fr auto; }
+  .award-line > .muted { display: none; }
+}
+
+/* ---- Colores de Fulbito FC (azul marino + verde lima) ---- */
+:root { --card-solid: #111e35; }
+[data-theme="pixel"] { --card-solid: var(--card); }
+
+/* ---- Versión moderna (sin pixel art): avatares redondos, bordes finos y sombras suaves ---- */
+.vec-avatar { display: block; flex: none; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 255, 255, .12); }
+.face-preview .vec-avatar { box-shadow: 0 0 0 3px var(--gold); }
+[data-theme="modern"] .ko-card { border-width: 1px; border-color: var(--line); border-radius: 14px; box-shadow: 0 6px 18px rgba(0, 0, 0, .3); }
+[data-theme="modern"] .match-row { border-width: 1px; border-color: var(--line); border-radius: 14px; }
+[data-theme="modern"] .ev-toggle { border-width: 1px; border-radius: 12px; }
+[data-theme="modern"] .champion { border: 1px solid var(--gold); }
+[data-theme="modern"] .champ-card.done { border-color: color-mix(in srgb, var(--gold) 60%, transparent); }
+[data-theme="modern"] .crest-tbd { border-radius: 6px 6px 12px 12px; }
+[data-theme="modern"] .standings .pos { font-weight: 600; }
+[data-theme="modern"] .sticky-actions { border-top-width: 1px; }
+@media (max-width: 719px) {
+  .pod-avatar .vec-avatar { width: 46px; height: 46px; }
+  .step.place-center .pod-avatar .vec-avatar { width: 58px; height: 58px; }
+}
+.rank-list .counts { display: inline-flex; align-items: center; gap: 4px; }
+.rank-list .counts .crest { filter: none; }
+.mode-btn { white-space: nowrap; padding-inline: 12px; }
+
+/* Amistosos */
+.friendly-row { grid-template-rows: auto auto; }
+.fr-meta { grid-column: 1 / -1; display: inline-flex; justify-content: center; align-items: center; gap: 4px; font-size: .8rem; }
+.friendly-sheet .prow { flex-wrap: wrap; }
+.friendly-sheet .prow .seg-btns { margin-left: auto; }
+.friendly-sheet .seg-btn { min-height: 36px; padding: 2px 10px; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guest-results { display: grid; gap: 4px; margin-bottom: 8px; }
+.guest-pill { font-size: .75rem; }
+@media (max-width: 719px) { .bottom-nav a { font-size: .72rem; } }
+[data-theme="pixel"] .fr-meta { font-size: 16px; }
+@media (max-width: 719px) { [data-theme="pixel"] .bottom-nav a { font-size: 7px; } }
+
+/* Ajustar fixture */
+.edit-row { margin: 10px 0 0; }
+.edit-row .on { border-color: var(--gold); color: var(--gold); }
+.fx-item { display: grid; gap: 4px; }
+.fx-item.swap-src .match-row { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
+.fx-tools { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 6px; }
+.fx-locked { text-align: center; margin: 0 0 6px; }
+.swap-banner { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 2px dashed var(--gold); border-radius: 10px; font-size: .9rem; }
+.swap-banner span { flex: 1; }
+.move-opt { width: 100%; justify-content: space-between; }
+.move-why { font-weight: 400; font-size: .8rem; opacity: .85; text-transform: none; text-align: right; }
+[data-theme="pixel"] .move-why { font-size: 15px; }
+[data-theme="pixel"] .swap-banner { font-size: 17px; border-radius: 0; }
+
+/* Pases: equipos para los que jugó */
+.clubs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 12px; }
+.club-chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 8px; border-radius: 999px; background: var(--solid); border: 1px solid var(--line); }
+
+/* Ayuda */
+.help { display: grid; gap: 8px; }
+.help-body { padding: 4px 2px 8px; }
+.help-body p { margin: 0 0 8px; line-height: 1.45; }
+[data-theme="pixel"] .help-body p { line-height: 1.25; }
+
+/* Rachas */
+.form-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.streak { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.streak.wins { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+.streak.unbeaten { background: color-mix(in srgb, var(--gold) 20%, transparent); color: var(--gold); }
+.streak.losses, .streak.winless { background: color-mix(in srgb, var(--danger) 22%, transparent); color: #ffb0b3; }
+.streak-records { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .85rem; color: var(--muted); margin-bottom: 10px; }
+[data-theme="pixel"] .streak { border-radius: 0; font-size: 15px; font-weight: 400; }
+[data-theme="pixel"] .streak-records { font-size: 16px; }
+
+/* Nube */
+.cloud-box { display: grid; gap: 8px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.ro-pill { border-color: var(--gold); white-space: nowrap; }
+.data-title { margin: 4px 0 8px; }
