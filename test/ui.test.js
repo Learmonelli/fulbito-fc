@@ -327,3 +327,21 @@ test('solo lectura (no es el admin): se ve todo, sin botones para cargar', async
     store.setLocked(false);
   }
 });
+
+test('paletas de colores: se eligen, se recuerdan y el escudo de la app las usa', async () => {
+  const { setPalette, savedPalette, currentPalette, paletteColors, PALETTES, applyPalette } = await import('../src/theme.js');
+  const { brandCrest } = await import('../src/brand.js');
+  applyPalette();
+  assert.equal(currentPalette(), 'clasico');
+  assert.ok(PALETTES.length >= 5);
+  assert.equal(setPalette('pasion'), true);
+  assert.equal(document.documentElement.dataset.palette, 'pasion');
+  assert.equal(savedPalette(), 'pasion');
+  assert.equal(setPalette('pasion'), false, 'ya estaba');
+  assert.equal(setPalette('arcoiris'), false, 'no existe');
+  assert.equal(paletteColors().color1, '#c62828');
+  // El escudo pixel de la app se pinta con el rojo de la paleta.
+  const crest = brandCrest(40);
+  assert.ok([...crest.querySelectorAll('rect')].some((r) => r.getAttribute('fill') === '#c62828'));
+  setPalette('clasico');
+});

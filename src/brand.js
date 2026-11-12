@@ -1,8 +1,10 @@
 // Marca de Fulbito FC: escudo azul marino y verde lima, y la canchita de fondo.
 import { crestEl } from './crest.js';
+import { paletteColors } from './theme.js';
 
 export const BRAND = { name: 'Fulbito FC', color1: '#1f4fbf', color2: '#b8f03c', pattern: 'chevron', logo: '' };
-export const brandCrest = (size = 40) => crestEl(BRAND, size);
+// El escudo de la app toma los colores de la paleta elegida (🎨 Aspecto).
+export const brandCrest = (size = 40) => crestEl({ ...BRAND, ...paletteColors() }, size);
 
 const NS = 'http://www.w3.org/2000/svg';
 const s = (tag, attrs = {}, ...kids) => {

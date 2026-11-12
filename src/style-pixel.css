@@ -7,6 +7,7 @@
   --font-body: 'VT323', ui-monospace, Consolas, monospace;
   --font-pixel: 'Press Start 2P', ui-monospace, Consolas, monospace;
   --solid: #1a2b48; --field: #0f1c32;
+  --header-bg: rgba(10, 20, 38, .92); --nav-bg: #0d1830; --hover: #24406a;
 }
 [data-theme="pixel"] body {
   font-family: var(--font-body); font-size: 19px; letter-spacing: .3px; line-height: 1.2;
@@ -31,8 +32,8 @@
 [data-theme="pixel"] .sheet-head h2 { font-size: 10px; }
 
 /* Encabezado y navegación */
-[data-theme="pixel"] .app-header { background: rgba(10, 20, 38, .92); border-bottom: 3px solid var(--edge); }
-[data-theme="pixel"] .bottom-nav { background: #0d1830; border-top: 3px solid var(--edge); backdrop-filter: none; }
+[data-theme="pixel"] .app-header { background: var(--header-bg); border-bottom: 3px solid var(--edge); }
+[data-theme="pixel"] .bottom-nav { background: var(--nav-bg); border-top: 3px solid var(--edge); backdrop-filter: none; }
 [data-theme="pixel"] .bottom-nav a { font-size: 8px; line-height: 1.6; border-radius: 10px; color: var(--muted); }
 [data-theme="pixel"] .bottom-nav a .ico { font-size: 20px; }
 [data-theme="pixel"] .bottom-nav a[aria-current="page"] { background: var(--card-2); color: var(--text); box-shadow: 0 2px 8px rgba(0, 0, 0, .25), inset 0 -3px 0 var(--gold); }
@@ -47,7 +48,7 @@
 [data-theme="pixel"] .bscore { font-size: 48px; font-family: var(--font-body); font-weight: 800; }
 [data-theme="pixel"] .mc-result { font-size: 38px; font-family: var(--font-body); font-weight: 800; }
 [data-theme="pixel"] .sheet-head { border-bottom: 3px solid var(--edge); }
-[data-theme="pixel"] .stat { background: #0f1c32; border: 2px solid var(--edge); border-bottom: 3px solid var(--gold-d); }
+[data-theme="pixel"] .stat { background: var(--field); border: 2px solid var(--edge); border-bottom: 3px solid var(--gold-d); }
 [data-theme="pixel"] .stat b { font-size: 28px; font-family: var(--font-body); }
 [data-theme="pixel"] .stat span { font-size: 14px; letter-spacing: 0; }
 [data-theme="pixel"] .step {
@@ -74,7 +75,7 @@
 [data-theme="pixel"] button.ghost, [data-theme="pixel"] .btn.ghost {
   background: var(--solid); color: var(--text); border: 2px solid var(--line); box-shadow: 3px 3px 0 rgba(0, 0, 0, .5);
 }
-[data-theme="pixel"] button.ghost:hover:not(:disabled), [data-theme="pixel"] .btn.ghost:hover { background: #24406a; }
+[data-theme="pixel"] button.ghost:hover:not(:disabled), [data-theme="pixel"] .btn.ghost:hover { background: var(--hover); }
 [data-theme="pixel"] .rival-goal { background: #c0345f; color: #fff; border: 2px solid #000; }
 [data-theme="pixel"] button.danger { background: transparent; color: var(--danger); border: 2px solid #5a2028; box-shadow: 3px 3px 0 rgba(0, 0, 0, .3); }
 [data-theme="pixel"] .act { font-size: 24px; }
@@ -95,9 +96,9 @@
 
 /* Campos */
 [data-theme="pixel"] input, [data-theme="pixel"] select, [data-theme="pixel"] textarea {
-  background: #0f1c32; border: 2px solid var(--edge); border-radius: 8px; font-family: var(--font-body); font-size: 19px;
+  background: var(--field); border: 2px solid var(--edge); border-radius: 8px; font-family: var(--font-body); font-size: 19px;
 }
-[data-theme="pixel"] .chip, [data-theme="pixel"] .pill { background: #0f1c32; border: 2px solid var(--line); }
+[data-theme="pixel"] .chip, [data-theme="pixel"] .pill { background: var(--field); border: 2px solid var(--line); }
 [data-theme="pixel"] .tag { font-size: 14px; }
 
 /* Separadores de listas */

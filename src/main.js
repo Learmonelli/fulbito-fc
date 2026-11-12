@@ -3,6 +3,7 @@ import '@fontsource/vt323/400.css';
 import './style.css';
 import './style-pixel.css';
 import './fulbito.css';
+import './palettes.css';
 import { h } from './dom.js';
 import { store } from './store.js';
 import { brandCrest, pitchBackground } from './brand.js';
@@ -18,10 +19,11 @@ import { openHelp } from './views/help.js';
 import { makeCloudSync } from './cloudSync.js';
 import { MAIN, isLeagueId, leagueIdFromUrl, leagueLink } from './league.js';
 import { cloudSection } from './ui/cloudPanel.js';
-import { applyTheme, setTheme, onTheme, isModern } from './theme.js';
+import { applyTheme, setTheme, onTheme, isModern, applyPalette, setPalette, currentPalette, PALETTES } from './theme.js';
 
-// Pixel o moderno: el último que se eligió en este navegador (botón 🎮/✨ del encabezado).
+// Modo y colores: los últimos que se eligieron en este celular (botón 🎨 del encabezado).
 applyTheme();
+applyPalette();
 
 // Las cuatro secciones de Promiedos (Fixture y tablas, Cuadro, Equipos y estadísticas, Campeones)
 // y los Amistosos internos, que van aparte.
@@ -117,7 +119,8 @@ function paint() {
     if (a.dataset.tab === tab.id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
   tab.render(main);
-  document.title = `${tab.title} · Fulbito FC`;
+  const lg = sync.cloud.league();
+  document.title = `${tab.title} · ${sync.leagueId !== MAIN && lg?.exists ? lg.name : 'Fulbito FC'}`;
   window.scrollTo(0, y);
   if (key !== lastKey && lastKey !== null) main.focus({ preventScroll: true }); // anuncia el cambio de pantalla
   lastKey = key;
@@ -127,20 +130,35 @@ window.addEventListener('hashchange', paint);
 store.subscribe(paint);
 store.onError((msg) => toast(msg, { ms: 8000 }));
 
-// ---- Modo pixel / moderno ----
+// ---- Aspecto: modo (pixel / moderno) y paleta de colores ----
 const crestSlot = h('span', { class: 'brand-crest' });
-const modeBtn = h('button', { class: 'ghost small mode-btn', onclick: () => setTheme(isModern() ? 'pixel' : 'modern') });
+const modeBtn = h('button', { class: 'ghost small icon-btn', 'aria-label': 'Aspecto: modo y colores', title: 'Aspecto', onclick: () => openLook() }, '🎨');
 function paintMode() {
-  crestSlot.replaceChildren(brandCrest(40)); // el escudo se dibuja en el estilo del modo
-  const next = isModern() ? 'pixel' : 'moderno';
-  modeBtn.textContent = isModern() ? '🎮 Pixel' : '✨ Moderno';
-  modeBtn.setAttribute('aria-label', `Cambiar a la versión ${next}`);
-  modeBtn.title = `Cambiar a la versión ${next}`;
+  crestSlot.replaceChildren(brandCrest(40)); // el escudo se dibuja en el estilo y los colores elegidos
+}
+function openLook() {
+  openSheet('🎨 Aspecto', (close) => {
+    const seg = (items, isOn, pick) => h('div', { class: 'seg-btns', role: 'group' }, items.map(([v, label]) => h('button', {
+      class: `seg-btn ${isOn(v) ? 'on' : ''}`, 'aria-pressed': String(isOn(v)), onclick: () => { pick(v); close(); openLook(); },
+    }, label)));
+    return h('div', { class: 'stack' },
+      h('h3', { class: 'list-heading' }, 'Modo'),
+      seg([['pixel', '🎮 Pixel'], ['modern', '✨ Moderno']], (v) => (v === 'modern') === isModern(), (v) => setTheme(v)),
+      h('h3', { class: 'list-heading' }, 'Colores'),
+      h('div', { class: 'palette-grid', role: 'group', 'aria-label': 'Paleta de colores' }, PALETTES.map(([id, label, c1, c2]) => {
+        const on = id === currentPalette();
+        return h('button', {
+          class: `palette-opt ${on ? 'on' : ''}`, 'aria-pressed': String(on), 'data-palette-id': id,
+          onclick: () => { setPalette(id); close(); openLook(); },
+        }, h('span', { class: 'palette-dots', 'aria-hidden': 'true' }, h('span', { style: `background:${c1}` }), h('span', { style: `background:${c2}` })), label);
+      })),
+      h('p', { class: 'muted small-note' }, 'Se guarda en este celular. Cada uno puede elegir el suyo; los datos son los mismos.'),
+      h('div', { class: 'row end' }, h('button', { class: 'ghost', onclick: close }, 'Listo')));
+  });
 }
 onTheme(() => {
   paintMode();
-  paint(); // escudos y caras se redibujan en el nuevo estilo
-  toast(isModern() ? '✨ Versión moderna' : '🎮 Versión pixel');
+  paint(); // escudos, caras y colores se redibujan con el nuevo aspecto
 });
 
 document.body.prepend(pitchBackground());

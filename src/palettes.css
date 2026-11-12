@@ -1,0 +1,65 @@
+/* Paletas de colores de Fulbito FC. Se eligen en 🎨 Aspecto y se aplican con data-palette en <html>.
+   Cada paleta define los colores del modo moderno ([data-palette]) y del modo pixel
+   ([data-theme="pixel"][data-palette], más específico). "clasico" (azul y lima) es el de siempre. */
+
+/* ---- Rojo y negro ---- */
+[data-palette="pasion"] {
+  --bg: #170a0b; --bg2: #0b0405; --wine: #b3202b; --wine-2: #d63a44; --gold: #ffca28; --gold-ink: #2a1a00;
+  --text: #fff4f2; --muted: #d6aeb0; --solid: #2c1214; --field: #1d0b0d;
+  --accent-rgb: 179, 32, 43; --header-bg: rgba(16, 6, 7, .9); --nav-bg: rgba(16, 6, 7, .94);
+  --sheet-bg: #241012; --toast-bg: #3a161a; --hover: #44191d;
+}
+[data-theme="pixel"][data-palette="pasion"] {
+  --card: #2a0f12; --card-2: #3a151a; --edge: #0c0405; --wine: #c62828; --wine-2: #3a151a;
+  --gold: #ffca28; --gold-d: #e0a800; --gold-ink: #2a1a00; --text: #fff4f2; --muted: #e0b4b7; --line: #6a2830;
+  --solid: #3a151a; --field: #1d0b0d; --header-bg: rgba(22, 8, 10, .92); --nav-bg: #1f0a0c; --hover: #4d1d22;
+}
+
+/* ---- Celeste y blanco ---- */
+[data-palette="cielo"] {
+  --bg: #0b2033; --bg2: #061321; --wine: #2b8fd6; --wine-2: #4aa8ea; --gold: #8fdcff; --gold-ink: #04263a;
+  --text: #f2faff; --muted: #a9c9df; --solid: #12304a; --field: #0a1c2d;
+  --accent-rgb: 43, 143, 214; --header-bg: rgba(6, 19, 33, .9); --nav-bg: rgba(6, 19, 33, .94);
+  --sheet-bg: #0f2a42; --toast-bg: #17406a; --hover: #1a4468;
+}
+[data-theme="pixel"][data-palette="cielo"] {
+  --card: #123a5c; --card-2: #184a73; --edge: #061523; --wine: #2b8fd6; --wine-2: #184a73;
+  --gold: #8fdcff; --gold-d: #4fb8e8; --gold-ink: #04263a; --text: #f2faff; --muted: #b5d6ec; --line: #2f6c9c;
+  --solid: #164266; --field: #0c2640; --header-bg: rgba(8, 26, 44, .92); --nav-bg: #0a2238; --hover: #22578a;
+}
+
+/* ---- Verde y dorado ---- */
+[data-palette="selva"] {
+  --bg: #08200f; --bg2: #041208; --wine: #1f8a4c; --wine-2: #2ea862; --gold: #ffd23f; --gold-ink: #2a1a00;
+  --text: #f1fff4; --muted: #a8cfb2; --solid: #123a20; --field: #0a2414;
+  --accent-rgb: 31, 138, 76; --header-bg: rgba(4, 18, 8, .9); --nav-bg: rgba(4, 18, 8, .94);
+  --sheet-bg: #0f2e19; --toast-bg: #17472a; --hover: #1a4a2b;
+}
+[data-theme="pixel"][data-palette="selva"] {
+  --card: #10331f; --card-2: #164428; --edge: #06160c; --wine: #1f8a4c; --wine-2: #164428;
+  --gold: #ffd23f; --gold-d: #d9a400; --gold-ink: #2a1706; --text: #eefff2; --muted: #a8d8b4; --line: #2b5e3c;
+  --solid: #174a2b; --field: #0b2716; --header-bg: rgba(8, 30, 15, .92); --nav-bg: #0b2816; --hover: #22623a;
+}
+
+/* ---- Violeta y naranja ---- */
+[data-palette="noche"] {
+  --bg: #150b24; --bg2: #0a0514; --wine: #7b3fc4; --wine-2: #9659dc; --gold: #ff9f1c; --gold-ink: #2a1300;
+  --text: #f8f2ff; --muted: #c2b0dc; --solid: #2a1846; --field: #170d28;
+  --accent-rgb: 123, 63, 196; --header-bg: rgba(12, 6, 22, .9); --nav-bg: rgba(12, 6, 22, .94);
+  --sheet-bg: #1f1236; --toast-bg: #321d55; --hover: #3b2363;
+}
+[data-theme="pixel"][data-palette="noche"] {
+  --card: #24123d; --card-2: #301a52; --edge: #0f0719; --wine: #7b3fc4; --wine-2: #301a52;
+  --gold: #ff9f1c; --gold-d: #d97b00; --gold-ink: #2a1300; --text: #f8f2ff; --muted: #c9b6e6; --line: #4b2f75;
+  --solid: #331d58; --field: #1a0e2c; --header-bg: rgba(18, 9, 32, .92); --nav-bg: #170c2a; --hover: #45297a;
+}
+
+/* Muestras de la paleta en la hoja de Aspecto */
+.palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.palette-opt { display: flex; align-items: center; gap: 10px; justify-content: flex-start; min-height: 52px; padding: 6px 10px;
+  background: var(--solid); color: var(--text); border: 2px solid var(--line); text-transform: none; letter-spacing: 0; box-shadow: none; }
+.palette-opt.on { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
+.palette-dots { display: inline-flex; flex: none; }
+.palette-dots span { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(0, 0, 0, .4); margin-right: -5px; }
+[data-theme="pixel"] .palette-dots span { border-radius: 0; }
+[data-theme="pixel"] .palette-opt { font-size: 18px; }

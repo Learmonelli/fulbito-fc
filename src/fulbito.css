@@ -169,7 +169,7 @@ button.ko-card:hover:not(:disabled) { border-color: var(--gold); }
 }
 
 /* ---- Colores de Fulbito FC (azul marino + verde lima) ---- */
-:root { --card-solid: #111e35; }
+:root { --card-solid: var(--sheet-bg); }
 [data-theme="pixel"] { --card-solid: var(--card); }
 
 /* ---- Versión moderna (sin pixel art): avatares redondos, bordes finos y sombras suaves ---- */

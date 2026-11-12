@@ -75,7 +75,7 @@ export const TOPICS = [
     'Los datos viven en la nube: todos ven lo mismo y los cambios llegan solos a cada celular.',
     'Los administradores entran desde 💾 con su email y contraseña (la primera vez, con un link al mail).',
     'En 💾 también se puede descargar una copia de todo. Importar una copia (solo el admin) reemplaza todo lo cargado.',
-    'El botón ✨ Moderno / 🎮 Pixel cambia el aspecto de la app. Los datos son los mismos.',
+    'El botón 🎨 (arriba) cambia el aspecto: modo 🎮 Pixel o ✨ Moderno y la paleta de colores. Se guarda en cada celular; los datos son los mismos.',
   ]],
 ];
 
