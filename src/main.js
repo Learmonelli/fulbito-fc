@@ -38,7 +38,6 @@ const main = h('main', { id: 'main', tabindex: '-1' });
 
 const route = () => TABS.find((t) => t.id === location.hash.split('/')[1]) ?? TABS[0];
 
-const subtitle = h('p', { class: 'brand-sub muted' });
 const nav = h('nav', { class: 'bottom-nav', 'aria-label': 'Secciones' }, TABS.map((t) =>
   h('a', { href: `#/${t.id}`, 'data-tab': t.id }, h('span', { class: 'ico', 'aria-hidden': 'true' }, t.ico), t.label)));
 
@@ -100,7 +99,6 @@ function paint() {
   nav.querySelectorAll('a').forEach((a) => {
     if (a.dataset.tab === tab.id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
-  subtitle.textContent = 'Campeonatos entre amigos'; // el campeonato elegido ya se ve en cada pestaña
   tab.render(main);
   document.title = `${tab.title} · Fulbito FC`;
   window.scrollTo(0, y);
@@ -133,7 +131,7 @@ app.append(
   h('header', { class: 'app-header' },
     h('a', { class: 'brand', href: '#/fixture', 'aria-label': 'Fulbito FC, inicio' },
       crestSlot,
-      h('div', {}, h('p', { class: 'brand-name' }, 'Fulbito FC'), subtitle)),
+      h('p', { class: 'brand-name' }, 'Fulbito FC')),
     h('div', { class: 'header-tools' },
       roPill,
       modeBtn,
