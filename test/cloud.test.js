@@ -37,7 +37,36 @@ function fakeSupabase() {
       },
       signOut: async () => { db.user = null; },
     },
-    from: () => ({
+    from: (table) => (table === 'fulbito_backups' ? backupsApi : leaguesApi),
+  };
+  // Copias: solo los admins de la liga ven y guardan (como las políticas de backups.sql).
+  db.backups = [];
+  const backupsApi = {
+    select: () => {
+      const q = { filters: [], eq(c, v) { q.filters.push([c, v]); return q; }, order() { return q; },
+        limit: async (n) => {
+          const rows = db.backups.filter((b) => q.filters.every(([c, v]) => b[c] === v))
+            .filter((b) => { const lg = db.rows.get(b.league_id); return lg && can(lg); })
+            .sort((x, y) => y.id - x.id).slice(0, n);
+          return { data: rows.map((b) => ({ ...b, data: structuredClone(b.data) })), error: null };
+        } };
+      return q;
+    },
+    insert: async (obj) => {
+      const lg = db.rows.get(obj.league_id);
+      if (!lg || !can(lg) || obj.kind !== 'manual') return { error: { message: 'new row violates row-level security policy' } };
+      db.backups.push({ id: db.backups.length + 1, created_at: new Date(Date.now() + db.backups.length).toISOString(), ...structuredClone(obj) });
+      return { error: null };
+    },
+  };
+  // El reloj del servidor (pg_cron): una copia por liga si cambió desde la última.
+  db.dailyBackup = () => {
+    for (const r of db.rows.values()) {
+      const last = db.backups.filter((b) => b.league_id === r.id).at(-1);
+      if (!last || JSON.stringify(last.data) !== JSON.stringify(r.data)) db.backups.push({ id: db.backups.length + 1, league_id: r.id, kind: 'auto', data: structuredClone(r.data), created_at: new Date().toISOString() });
+    }
+  };
+  const leaguesApi = {
       select: (cols) => ({
         eq: async (col, v) => ({ data: [...db.rows.values()].filter((r) => r[col] === v).map((r) => pick(r, cols.replace(/\s/g, ''))), error: null }),
         contains: async (col, arr) => ({ data: [...db.rows.values()].filter((r) => arr.every((x) => r[col].includes(x))).map((r) => pick(r, cols.replace(/\s/g, ''))), error: null }),
@@ -66,14 +95,15 @@ function fakeSupabase() {
           },
         }),
       }),
-    }),
+  };
+  Object.assign(db.client, {
     channel: (name) => {
       const id = name.replace('fulbito-', '');
       const ch = { on: (_e, _f, cb) => { db.listeners.push({ id, cb }); return ch; }, subscribe: () => ch };
       return ch;
     },
     removeChannel() {},
-  };
+  });
   db.query = query;
   return db;
 }
@@ -177,4 +207,35 @@ test('link a una liga que no existe: se avisa y nadie edita', async () => {
   await cloud.signInWithPassword(ORGA.email, 'secreta123');
   assert.equal(store.isLocked(), true);
   assert.equal(canEditLeague(ORGA, cloud.league()), false);
+});
+
+test('copias de seguridad: diarias del servidor, a mano, y solo para los admins de la liga', async () => {
+  const db = fakeSupabase();
+  const { cloud, sync } = setup(db, 'main');
+  store.loadDemo();
+  await sync.start();
+  await cloud.signInWithPassword(LEANDRO.email, 'secreta123');
+  await sync.publishLocal();
+  // El servidor guarda la copia diaria; si no hubo cambios, no repite.
+  db.dailyBackup(); db.dailyBackup();
+  let list = await cloud.listBackups();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].kind, 'auto');
+  // Un cambio, una copia a mano y restaurar la de antes.
+  store.addTeam('Equipo Nuevo');
+  await cloud.flushNow();
+  await cloud.saveBackup(store.snapshot());
+  list = await cloud.listBackups();
+  assert.deepEqual(list.map((b) => b.kind), ['manual', 'auto']);
+  const old = await cloud.getBackup(list.at(-1).id);
+  assert.equal(old.teams.length, 8, 'la automática es de antes del cambio');
+  assert.equal(store.importJson(JSON.stringify(old)), true);
+  await cloud.flushNow();
+  assert.equal(db.rows.get('main').data.teams.length, 8, 'restaurada en la nube');
+  // Otro usuario no ve ni guarda copias de esta liga.
+  await cloud.signOut();
+  await cloud.signInWithPassword(HINCHA.email, 'secreta123');
+  assert.deepEqual(await cloud.listBackups(), []);
+  await assert.rejects(cloud.saveBackup({}), /Solo los administradores/);
+  await assert.rejects(cloud.getBackup(1), /Solo los administradores/);
 });

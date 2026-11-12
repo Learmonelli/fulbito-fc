@@ -199,6 +199,28 @@ export function createCloud({ createClient = realCreateClient, timers = globalTh
       setLeague(data[0], league.id);
       return league.admins;
     },
+    // ---- Copias de seguridad (tabla fulbito_backups, ver supabase/backups.sql) ----
+    // La copia diaria la hace el servidor; acá se listan, se guarda una a mano y se baja una para restaurar.
+    async listBackups() {
+      if (!client || !league?.exists || !api.canEdit()) return [];
+      const { data, error } = await client.from('fulbito_backups').select('id, kind, created_at')
+        .eq('league_id', league.id).order('created_at', { ascending: false }).limit(30);
+      if (error) throw new Error(friendly(error));
+      return data || [];
+    },
+    async getBackup(id) {
+      if (!client || !api.canEdit()) throw new Error('Solo los administradores de esta liga ven sus copias.');
+      const { data, error } = await client.from('fulbito_backups').select('data').eq('id', id).limit(1);
+      if (error) throw new Error(friendly(error));
+      if (!data?.[0]) throw new Error('No se encontró esa copia.');
+      return data[0].data;
+    },
+    async saveBackup(data) {
+      if (!client || !league?.exists || !api.canEdit()) throw new Error('Solo los administradores pueden guardar copias.');
+      const { error } = await client.from('fulbito_backups').insert({ league_id: league.id, kind: 'manual', data });
+      if (error) throw new Error(friendly(error));
+    },
+
     async renameLeague(name) {
       if (!client || !league?.exists || !api.canEdit()) throw new Error('Solo los administradores pueden cambiar el nombre.');
       const n = String(name ?? '').trim().slice(0, 60);

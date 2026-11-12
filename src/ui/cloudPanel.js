@@ -6,6 +6,7 @@ import { leagueLink, MAIN, isEmail, cleanEmail } from '../league.js';
 import { toast } from './toast.js';
 import { confirmDialog } from './sheet.js';
 import { installSection } from './install.js';
+import { store } from '../store.js';
 
 const STATUS = {
   off: '⚪ Sin conexión a la nube', connecting: '🟡 Conectando…', ok: '🟢 Conectada', saving: '🟡 Guardando…', error: '🔴 Problema con la nube',
@@ -61,6 +62,52 @@ function adminsBox(sync) {
   };
   paint();
   return box;
+}
+
+// Copias de seguridad de la liga: la del servidor (todos los días a las 03:00) y las que se guardan a mano.
+const fmtWhen = (iso) => new Date(iso).toLocaleString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+function backupsBox(sync, close) {
+  const { cloud } = sync;
+  const list = h('div', {}, h('p', { class: 'muted small-note' }, 'Buscando copias…'));
+  const err = h('p', { class: 'error', role: 'alert' });
+  const download = (data, when) => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    const a = h('a', { href: url, download: `fulbito-${sync.leagueId}-${when.slice(0, 10)}.json` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+  const paint = () => cloud.listBackups().then((rows) => {
+    fill(list, rows.length
+      ? h('ul', { class: 'plist backups-list' }, rows.map((b) => h('li', { class: 'prow' },
+        h('span', { class: 'grow' }, `${b.kind === 'auto' ? '🕒' : '✋'} ${fmtWhen(b.created_at)}`,
+          h('span', { class: 'muted small-note' }, b.kind === 'auto' ? ' · automática' : ' · a mano')),
+        h('button', { class: 'ghost small', 'aria-label': `Descargar la copia del ${fmtWhen(b.created_at)}`, onclick: async () => {
+          err.textContent = '';
+          try { download(await cloud.getBackup(b.id), b.created_at); } catch (ex) { err.textContent = ex.message; }
+        } }, '⬇'),
+        h('button', { class: 'ghost small', onclick: async () => {
+          err.textContent = '';
+          const ok = await confirmDialog(`Se reemplaza TODA la liga por la copia del ${fmtWhen(b.created_at)}. Lo de ahora se guarda antes como copia, por las dudas. ¿Seguir?`, { okLabel: 'Restaurar', danger: true });
+          if (!ok) return;
+          try {
+            const data = await cloud.getBackup(b.id);
+            await cloud.saveBackup(store.snapshot()); // red de seguridad: lo de ahora queda guardado
+            if (!store.importJson(JSON.stringify(data))) throw new Error('La copia no es válida.');
+            toast('↩ Liga restaurada.'); close();
+          } catch (ex) { err.textContent = ex.message; }
+        } }, 'Restaurar'))))
+      : h('p', { class: 'muted small-note' }, 'Todavía no hay copias. La primera automática se hace esta madrugada (03:00).'));
+  }).catch((ex) => fill(list, h('p', { class: 'error' }, ex.message)));
+  paint();
+  return h('details', { class: 'face-group' }, h('summary', {}, '🗂 Copias de seguridad'),
+    h('p', { class: 'muted small-note' }, 'El servidor guarda una copia de la liga todos los días a las 03:00 (si hubo cambios) y conserva las últimas 30.'),
+    h('button', { class: 'ghost', onclick: async (e) => {
+      err.textContent = ''; e.currentTarget.disabled = true;
+      try { await cloud.saveBackup(store.snapshot()); toast('🗂 Copia guardada.'); paint(); } catch (ex) { err.textContent = ex.message; }
+      e.currentTarget.disabled = false;
+    } }, '🗂 Guardar una copia ahora'),
+    list, err);
 }
 
 function myLeaguesBox(sync) {
@@ -159,6 +206,7 @@ export function cloudSection(sync, close) {
         try { await sync.publishLocal(); toast('⬆ Datos subidos a la nube.'); close(); } catch (ex) { err.textContent = ex.message; e.currentTarget.disabled = false; }
       } }, '⬆ Subir los datos de este navegador'), err) : null,
     user && cloud.canEdit() ? adminsBox(sync) : null,
+    user && cloud.canEdit() && cloud.league()?.exists ? backupsBox(sync, close) : null,
     user ? myLeaguesBox(sync) : null,
     user ? createLeagueBox(sync) : null);
 }
