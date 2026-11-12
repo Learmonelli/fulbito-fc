@@ -26,7 +26,10 @@ const listeners = new Set();
 let errorHandler = () => {};
 const uid = () => crypto.randomUUID();
 const clean = (s, max = 60) => String(s ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
-const empty = () => ({ teams: [], players: [], tournaments: [], currentId: null, friendlies: [] });
+const empty = () => ({ teams: [], players: [], tournaments: [], currentId: null, friendlies: [], look: { palette: '' } });
+// Paletas válidas para los colores de la liga (las mismas de palettes.css / theme.js).
+export const LEAGUE_PALETTES = ['clasico', 'pasion', 'cielo', 'selva', 'noche'];
+const normalizeLook = (l) => ({ palette: LEAGUE_PALETTES.includes(l?.palette) ? l.palette : '' });
 export const emptyState = () => ({ app: 'fulbito-fc', version: 1, ...empty() });
 
 function shuffled(arr, rnd = Math.random) {
@@ -88,7 +91,7 @@ function normalize(raw) {
   const friendlies = (Array.isArray(raw.friendlies) ? raw.friendlies : [])
     .filter((f) => f && ids.has(f.teamId))
     .map((f) => normalizeFriendly(f, playerIds));
-  return { teams, players, tournaments, currentId, friendlies };
+  return { teams, players, tournaments, currentId, friendlies, look: normalizeLook(raw.look) };
 }
 
 // Amistoso interno: un equipo (anfitrión) partido en dos lados; puede tener invitados de otros equipos.
@@ -522,6 +525,14 @@ export const store = {
     return true;
   },
 
+  // ---- Colores de la liga (los elige un admin; todos la ven así salvo que elijan otros) ----
+  setLook({ palette }) {
+    if (palette !== '' && !LEAGUE_PALETTES.includes(palette)) return false;
+    state.look = { ...normalizeLook(state.look), palette };
+    commit();
+    return true;
+  },
+
   // ---- Copias ----
   exportJson: () => JSON.stringify({ app: 'fulbito-fc', version: 1, ...state }, null, 2),
   importJson(text) {
@@ -603,7 +614,7 @@ const LOCKED_OPS = {
   text: ['saveMatch', 'moveMatch', 'swapMatches', 'swapRounds', 'flipHome', 'saveFriendly', 'checkMove', 'checkSwapRounds'],
   none: ['addTeam', 'addPlayer', 'createTournament', 'addFriendly'],
   no: ['updateTeam', 'deleteTeam', 'updatePlayer', 'deletePlayer', 'renameTournament', 'deleteTournament', 'startPlayoffs',
-    'setMatchDate', 'reopenMatch', 'deleteFriendly', 'importJson', 'clearAll', 'loadDemo'],
+    'setMatchDate', 'reopenMatch', 'deleteFriendly', 'importJson', 'clearAll', 'loadDemo', 'setLook'],
 };
 for (const [kind, names] of Object.entries(LOCKED_OPS)) {
   for (const name of names) {

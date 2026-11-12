@@ -62,4 +62,11 @@
 .palette-dots { display: inline-flex; flex: none; }
 .palette-dots span { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(0, 0, 0, .4); margin-right: -5px; }
 [data-theme="pixel"] .palette-dots span { border-radius: 0; }
-[data-theme="pixel"] .palette-opt { font-size: 18px; }
+/* En pixel, los botones son dorados por defecto: acá van neutros y solo se marca la elegida. */
+[data-theme="pixel"] .palette-opt {
+  font-size: 18px; background: var(--solid); color: var(--text); border: 2px solid var(--line);
+  text-transform: none; box-shadow: 3px 3px 0 rgba(0, 0, 0, .4);
+}
+[data-theme="pixel"] .palette-opt.on { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold); }
+[data-theme="pixel"] .palette-opt .muted { font-size: 15px; }
+.palette-opt.follow { width: 100%; }

@@ -75,7 +75,8 @@ export const TOPICS = [
     'Los datos viven en la nube: todos ven lo mismo y los cambios llegan solos a cada celular.',
     'Los administradores entran desde 💾 con su email y contraseña (la primera vez, con un link al mail).',
     'En 💾 también se puede descargar una copia de todo. Importar una copia (solo el admin) reemplaza todo lo cargado.',
-    'El botón 🎨 (arriba) cambia el aspecto: modo 🎮 Pixel o ✨ Moderno y la paleta de colores. Se guarda en cada celular; los datos son los mismos.',
+    'El botón 🎨 (arriba) cambia el aspecto: modo 🎮 Pixel o ✨ Moderno y los colores.',
+    'Colores de la liga: los elige un administrador en 🎨 y todos la ven así. Si preferís otros, elegí tu paleta en "📱 En este celular" (y "🏆 Los colores de la liga" para volver).',
   ]],
 ];
 

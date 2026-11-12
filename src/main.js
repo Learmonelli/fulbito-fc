@@ -19,11 +19,17 @@ import { openHelp } from './views/help.js';
 import { makeCloudSync } from './cloudSync.js';
 import { MAIN, isLeagueId, leagueIdFromUrl, leagueLink } from './league.js';
 import { cloudSection } from './ui/cloudPanel.js';
-import { applyTheme, setTheme, onTheme, isModern, applyPalette, setPalette, currentPalette, PALETTES } from './theme.js';
+import {
+  applyTheme, setTheme, onTheme, isModern, applyPalette, setPalette, savedPalette, PALETTES,
+  FOLLOW_LEAGUE, setLeaguePalette, getLeaguePalette, paletteName,
+} from './theme.js';
 
 // Modo y colores: los últimos que se eligieron en este celular (botón 🎨 del encabezado).
 applyTheme();
 applyPalette();
+// Colores de la liga: vienen con sus datos (y se actualizan en vivo cuando el organizador los cambia).
+setLeaguePalette(store.get().look?.palette);
+store.subscribe((s) => setLeaguePalette(s.look?.palette));
 
 // Las cuatro secciones de Promiedos (Fixture y tablas, Cuadro, Equipos y estadísticas, Campeones)
 // y los Amistosos internos, que van aparte.
@@ -138,21 +144,33 @@ function paintMode() {
 }
 function openLook() {
   openSheet('🎨 Aspecto', (close) => {
+    // Botones de paletas. isOn(id) marca la elegida; pick(id) la aplica y vuelve a dibujar la hoja.
+    const paletteGrid = (isOn, pick, scope) => h('div', { class: 'palette-grid', role: 'group', 'aria-label': `Paleta (${scope})` },
+      PALETTES.map(([id, label, c1, c2]) => h('button', {
+        class: `palette-opt ${isOn(id) ? 'on' : ''}`, 'aria-pressed': String(isOn(id)), 'data-palette-id': id, 'data-scope': scope,
+        onclick: () => { pick(id); close(); openLook(); },
+      }, h('span', { class: 'palette-dots', 'aria-hidden': 'true' }, h('span', { style: `background:${c1}` }), h('span', { style: `background:${c2}` })), label)));
     const seg = (items, isOn, pick) => h('div', { class: 'seg-btns', role: 'group' }, items.map(([v, label]) => h('button', {
       class: `seg-btn ${isOn(v) ? 'on' : ''}`, 'aria-pressed': String(isOn(v)), onclick: () => { pick(v); close(); openLook(); },
     }, label)));
     return h('div', { class: 'stack' },
       h('h3', { class: 'list-heading' }, 'Modo'),
       seg([['pixel', '🎮 Pixel'], ['modern', '✨ Moderno']], (v) => (v === 'modern') === isModern(), (v) => setTheme(v)),
-      h('h3', { class: 'list-heading' }, 'Colores'),
-      h('div', { class: 'palette-grid', role: 'group', 'aria-label': 'Paleta de colores' }, PALETTES.map(([id, label, c1, c2]) => {
-        const on = id === currentPalette();
-        return h('button', {
-          class: `palette-opt ${on ? 'on' : ''}`, 'aria-pressed': String(on), 'data-palette-id': id,
-          onclick: () => { setPalette(id); close(); openLook(); },
-        }, h('span', { class: 'palette-dots', 'aria-hidden': 'true' }, h('span', { style: `background:${c1}` }), h('span', { style: `background:${c2}` })), label);
-      })),
-      h('p', { class: 'muted small-note' }, 'Se guarda en este celular. Cada uno puede elegir el suyo; los datos son los mismos.'),
+      // Colores de la liga (para todos): solo los administradores.
+      store.isLocked() ? null : [
+        h('h3', { class: 'list-heading' }, '🏆 Colores de la liga (para todos)'),
+        h('p', { class: 'muted small-note' }, 'Así la ve todo el mundo, salvo quien elija otros colores en su celular.'),
+        paletteGrid((id) => id === (getLeaguePalette() || 'clasico'), (id) => {
+          if (store.setLook({ palette: id })) toast(`🎨 Colores de la liga: ${paletteName(id)}`);
+        }, 'liga'),
+      ],
+      h('h3', { class: 'list-heading' }, '📱 En este celular'),
+      h('button', {
+        class: `palette-opt follow ${savedPalette() === FOLLOW_LEAGUE ? 'on' : ''}`, 'aria-pressed': String(savedPalette() === FOLLOW_LEAGUE),
+        onclick: () => { setPalette(FOLLOW_LEAGUE); close(); openLook(); },
+      }, '🏆 Los colores de la liga', h('span', { class: 'muted small-note' }, ` (${paletteName(getLeaguePalette() || 'clasico')})`)),
+      paletteGrid((id) => savedPalette() === id, (id) => setPalette(id), 'mio'),
+      h('p', { class: 'muted small-note' }, 'Lo que elijas acá queda solo en este celular; los datos son los mismos.'),
       h('div', { class: 'row end' }, h('button', { class: 'ghost', onclick: close }, 'Listo')));
   });
 }

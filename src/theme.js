@@ -34,24 +34,46 @@ export const PALETTES = [
 ];
 const PKEY = 'fulbito_palette';
 const PIDS = PALETTES.map((p) => p[0]);
+export const FOLLOW_LEAGUE = 'liga'; // elección personal "usar los colores de la liga"
+let leaguePalette = ''; // los colores que eligió el organizador ('' = sin elegir)
 
+// Lo que eligió esta persona: una paleta o 'liga' (por defecto).
 export function savedPalette() {
-  try { const v = localStorage.getItem(PKEY); return PIDS.includes(v) ? v : 'clasico'; } catch { return 'clasico'; }
+  try { const v = localStorage.getItem(PKEY); return PIDS.includes(v) ? v : FOLLOW_LEAGUE; } catch { return FOLLOW_LEAGUE; }
 }
+// La paleta que se ve: la personal, o la de la liga, o la clásica.
+export const effectivePalette = (choice = savedPalette()) => (choice === FOLLOW_LEAGUE ? (PIDS.includes(leaguePalette) ? leaguePalette : 'clasico') : choice);
 export const currentPalette = () => (typeof document !== 'undefined' && document.documentElement.dataset.palette) || 'clasico';
 export const paletteColors = (id = currentPalette()) => { const p = PALETTES.find((x) => x[0] === id) ?? PALETTES[0]; return { color1: p[2], color2: p[3] }; };
+export const paletteName = (id) => (PALETTES.find((x) => x[0] === id) ?? PALETTES[0])[1];
 
-export function applyPalette(id = savedPalette()) {
-  document.documentElement.dataset.palette = PIDS.includes(id) ? id : 'clasico';
+const notify = () => listeners.forEach((fn) => fn(currentTheme()));
+
+export function applyPalette(choice = savedPalette()) {
+  document.documentElement.dataset.palette = effectivePalette(choice);
 }
 
+// Elección personal: una paleta, o FOLLOW_LEAGUE para volver a los colores de la liga.
 export function setPalette(id) {
-  if (!PIDS.includes(id) || id === currentPalette()) return false;
+  if (!PIDS.includes(id) && id !== FOLLOW_LEAGUE) return false;
+  if (id === savedPalette() && effectivePalette(id) === currentPalette()) return false;
   try { localStorage.setItem(PKEY, id); } catch { /* sin almacenamiento: queda solo en esta visita */ }
   applyPalette(id);
-  listeners.forEach((fn) => fn(currentTheme()));
+  notify();
   return true;
 }
+
+// Los colores de la liga cambiaron (llegan con los datos). Solo se ven si la persona sigue a la liga.
+export function setLeaguePalette(id) {
+  const next = PIDS.includes(id) ? id : '';
+  if (next === leaguePalette) return false;
+  leaguePalette = next;
+  const before = currentPalette();
+  applyPalette();
+  if (currentPalette() !== before) notify();
+  return true;
+}
+export const getLeaguePalette = () => leaguePalette;
 
 export function setTheme(theme) {
   if (!THEMES.includes(theme) || theme === currentTheme()) return false;

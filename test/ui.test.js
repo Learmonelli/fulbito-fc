@@ -345,3 +345,32 @@ test('paletas de colores: se eligen, se recuerdan y el escudo de la app las usa'
   assert.ok([...crest.querySelectorAll('rect')].some((r) => r.getAttribute('fill') === '#c62828'));
   setPalette('clasico');
 });
+
+test('colores de la liga: los elige un admin, todos los ven salvo quien eligió otros', async () => {
+  const { setPalette, setLeaguePalette, currentPalette, savedPalette, FOLLOW_LEAGUE, applyPalette } = await import('../src/theme.js');
+  setPalette(FOLLOW_LEAGUE);
+  assert.equal(savedPalette(), FOLLOW_LEAGUE);
+  setLeaguePalette('');
+  applyPalette();
+  assert.equal(currentPalette(), 'clasico', 'sin elegir: la clásica');
+  // El organizador elige: se guarda con los datos de la liga.
+  assert.equal(store.setLook({ palette: 'selva' }), true);
+  assert.equal(store.get().look.palette, 'selva');
+  assert.equal(store.setLook({ palette: 'arcoiris' }), false);
+  setLeaguePalette(store.get().look.palette); // lo que hace main.js al cambiar los datos
+  assert.equal(currentPalette(), 'selva', 'quien sigue a la liga la ve con sus colores');
+  // Alguien elige sus propios colores: la liga ya no lo cambia.
+  setPalette('noche');
+  setLeaguePalette('cielo');
+  assert.equal(currentPalette(), 'noche');
+  // Vuelve a los de la liga.
+  setPalette(FOLLOW_LEAGUE);
+  assert.equal(currentPalette(), 'cielo');
+  // Quien solo mira no puede cambiar los colores de la liga; viajan en la copia.
+  store.setLocked(true);
+  assert.equal(store.setLook({ palette: 'pasion' }), false);
+  store.setLocked(false);
+  assert.match(store.exportJson(), /"palette": "selva"/);
+  store.setLook({ palette: '' });
+  setLeaguePalette('');
+});
