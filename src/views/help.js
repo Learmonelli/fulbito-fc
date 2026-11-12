@@ -63,9 +63,10 @@ export const TOPICS = [
     'El palmarés cuenta los títulos de cada equipo.',
     'Cada campeonato muestra al campeón, el 2.° y el 3.°, el goleador y quién fue más veces figura. Los que siguen en juego dicen cuántos partidos faltan.',
   ]],
-  ['datos', '💾 Datos, copias y aspecto', null, [
-    'Por ahora los datos se guardan solo en este navegador. En 💾 podés descargar una copia y después importarla, también en otra compu.',
-    'Importar reemplaza todo lo que haya cargado.',
+  ['datos', '💾 Nube, copias y aspecto', null, [
+    'Los datos viven en la nube: todos ven lo mismo y los cambios llegan solos a cada celular.',
+    'Solo el administrador carga o cambia datos. Los demás ven "👀 Solo lectura". El admin entra desde 💾 con su email y contraseña.',
+    'En 💾 también se puede descargar una copia de todo. Importar una copia (solo el admin) reemplaza todo lo cargado.',
     'El botón ✨ Moderno / 🎮 Pixel cambia el aspecto de la app. Los datos son los mismos.',
   ]],
 ];
