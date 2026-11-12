@@ -78,7 +78,7 @@ export function renderBracket(root) {
         h('p', { class: pending ? 'muted' : '' }, pending
           ? `El cuadro se arma cuando termine la fase de liga. ${missing(pending, 'F')}.`
           : 'La fase de liga terminó: ya se puede armar el cuadro.'),
-        h('button', { disabled: pending > 0, onclick: () => { if (store.startPlayoffs(tour.id)) toast('🏆 Cuadro armado.'); } }, 'Armar el cuadro')),
+        store.isLocked() ? null : h('button', { disabled: pending > 0, onclick: () => { if (store.startPlayoffs(tour.id)) toast('🏆 Cuadro armado.'); } }, 'Armar el cuadro')),
       h('div', { class: 'bracket' }, previewRounds(tour).map(([label, count]) => h('section', { class: 'ko-round' },
         h('h2', { class: 'list-heading' }, label),
         Array.from({ length: count }, () => h('div', { class: 'ko-card tbd' },

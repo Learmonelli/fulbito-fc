@@ -43,8 +43,6 @@ const nav = h('nav', { class: 'bottom-nav', 'aria-label': 'Secciones' }, TABS.ma
 
 // ---- Nube (Supabase) ----
 const sync = makeCloudSync();
-const roPill = h('button', { class: 'ghost small ro-pill', hidden: true, onclick: () => openData(), 'aria-label': 'Modo solo lectura: entrar como administrador' }, '👀 Solo lectura');
-const paintCloud = () => { roPill.hidden = !store.isLocked(); };
 sync.cloud.onStatus((st, d) => { if (st === 'error' && d) toast(`☁️ ${d}`, { ms: 7000 }); });
 
 function downloadCopy() {
@@ -133,13 +131,10 @@ app.append(
       crestSlot,
       h('p', { class: 'brand-name' }, 'Fulbito FC')),
     h('div', { class: 'header-tools' },
-      roPill,
       modeBtn,
       h('button', { class: 'ghost small icon-btn', 'aria-label': 'Ayuda: cómo se usa', title: 'Ayuda', onclick: () => openHelp(route().id) }, '❓'),
       h('button', { class: 'ghost small icon-btn', 'aria-label': 'Datos y copias de seguridad', onclick: openData }, '💾'))),
   main, nav);
 paintMode();
 paint();
-store.subscribe(paintCloud);
-paintCloud();
 sync.start(); // si hay proyecto de Supabase configurado, baja los datos y queda escuchando

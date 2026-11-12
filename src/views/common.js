@@ -32,7 +32,7 @@ export function tournamentPicker(s, { onNew } = {}) {
         onclick: () => store.setCurrent(t.id),
       }, tourTitle(t));
     }),
-    onNew ? h('button', { class: 'chip-btn add', onclick: onNew }, '＋ Nuevo') : null);
+    onNew && !store.isLocked() ? h('button', { class: 'chip-btn add', onclick: onNew }, '＋ Nuevo') : null);
 }
 
 // Fila de un partido al estilo Promiedos: local | resultado (o fecha) | visitante.

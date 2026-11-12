@@ -224,19 +224,23 @@ export function openFriendlySheet(id, { shuffle = false } = {}) {
     };
 
     paintAll();
-    return h('div', { class: 'match-sheet friendly-sheet' },
+    const viewer = store.isLocked(); // no es el admin: solo mira
+    const body = h('div', { class: 'match-sheet friendly-sheet' },
       h('p', { class: 'muted center' }, teamTag(host, 18), ' · Amistoso (no suma en campeonatos)'),
       h('div', { class: 'row' }, h('div', { class: 'grow' }, h('label', { class: 'field' }, h('span', {}, 'Lado A'), nameIn('homeName', 'Nombre del lado A'))),
         h('div', { class: 'grow' }, h('label', { class: 'field' }, h('span', {}, 'Lado B'), nameIn('awayName', 'Nombre del lado B')))),
       h('label', { class: 'field' }, h('span', {}, 'Fecha'), h('input', { type: 'date', value: draft.date, 'aria-label': 'Fecha', onchange: (e) => { draft.date = e.target.value; } })),
       teamsBox, scoreBox, note, detailBox, err,
       h('div', { class: 'row wrap sticky-actions' },
-        h('button', { onclick: save }, f.played ? 'Guardar cambios' : 'Guardar resultado'),
-        h('button', { class: 'danger', onclick: async () => {
+        viewer ? null : h('button', { onclick: save }, f.played ? 'Guardar cambios' : 'Guardar resultado'),
+        viewer ? null : h('button', { class: 'danger', onclick: async () => {
           const ok = await confirmDialog('Se borra este amistoso y sus estadísticas.', { okLabel: 'Borrar', danger: true });
           if (ok && store.deleteFriendly(f.id)) { close(); toast('Amistoso borrado.'); }
         } }, 'Borrar'),
-        h('button', { class: 'ghost', onclick: close }, 'Cerrar')));
+        h('button', { class: 'ghost', 'data-keep': '', onclick: close }, 'Cerrar')));
+    // Solo lectura: se ve todo, no se toca nada.
+    if (viewer) body.querySelectorAll('button:not([data-keep]), input').forEach((x) => { x.disabled = true; });
+    return body;
   });
 }
 
@@ -262,7 +266,7 @@ export function renderFriendlies(root) {
   fill(root,
     h('h1', { class: 'page-title' }, 'Amistosos'),
     h('p', { class: 'muted' }, 'Partidos internos de un equipo. Se registran aparte: no suman en tablas ni cuadros.'),
-    h('div', { class: 'row wrap' }, h('button', { onclick: () => openFriendlyForm(ui.teamId === 'all' ? null : ui.teamId) }, '＋ Nuevo amistoso'),
+    h('div', { class: 'row wrap' }, store.isLocked() ? null : h('button', { onclick: () => openFriendlyForm(ui.teamId === 'all' ? null : ui.teamId) }, '＋ Nuevo amistoso'),
       s.friendlies.length ? h('a', { class: 'btn ghost', href: '#/equipos', onclick: () => showFriendlyStats() }, '📊 Ver estadísticas') : null),
     hosts.length > 1 ? h('div', { class: 'chips', role: 'group', 'aria-label': 'Equipo' },
       [['all', 'Todos'], ...hosts.map((t) => [t.id, t.name])].map(([id, label]) => h('button', {

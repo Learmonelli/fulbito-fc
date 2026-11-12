@@ -49,7 +49,7 @@ export function cloudSection(sync, close) {
   const email = h('input', { type: 'email', value: ADMIN_EMAIL, autocomplete: 'username', 'aria-label': 'Email del administrador' });
   const pass = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Contraseña', 'aria-label': 'Contraseña' });
   return h('div', { class: 'cloud-box' }, head,
-    h('p', { class: 'muted' }, '👀 Estás mirando en modo solo lectura. Para cargar resultados entrá como administrador.'),
+    h('p', { class: 'muted' }, 'Para cargar o cambiar datos, entrá como administrador.'),
     h('form', {
       class: 'stack', onsubmit: async (e) => {
         e.preventDefault(); err.textContent = '';

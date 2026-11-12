@@ -65,7 +65,7 @@ export const TOPICS = [
   ]],
   ['datos', '💾 Nube, copias y aspecto', null, [
     'Los datos viven en la nube: todos ven lo mismo y los cambios llegan solos a cada celular.',
-    'Solo el administrador carga o cambia datos. Los demás ven "👀 Solo lectura". El admin entra desde 💾 con su email y contraseña.',
+    'Solo el administrador carga o cambia datos; los demás ven todo pero sin botones para editar. El admin entra desde 💾 con su email y contraseña.',
     'En 💾 también se puede descargar una copia de todo. Importar una copia (solo el admin) reemplaza todo lo cargado.',
     'El botón ✨ Moderno / 🎮 Pixel cambia el aspecto de la app. Los datos son los mismos.',
   ]],

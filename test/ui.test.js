@@ -295,3 +295,35 @@ test('ayuda: temas plegables y abre en el de la pestaña actual', async () => {
   assert.equal(sheet().querySelector('.help-topic[open]').dataset.topic, 'amistosos');
   closeSheets();
 });
+
+test('solo lectura (no es el admin): se ve todo, sin botones para cargar', async () => {
+  const { openMatchSheet } = await import('../src/views/matchSheet.js');
+  store.setLocked(true);
+  try {
+    renderFixture(root);
+    assert.equal(btn(root, /Ajustar fixture/), undefined);
+    assert.equal(root.querySelector('.tour-chips .add'), null, 'sin "＋ Nuevo"');
+    assert.equal(root.querySelector('[aria-label="Editar campeonato"]'), null);
+    assert.ok(root.querySelector('.standings tbody tr'), 'la tabla se ve igual');
+    renderTeams(root);
+    assert.equal(btn(root, /Nuevo equipo/), undefined);
+    // Un partido se abre para mirar, pero sin guardar y con todo deshabilitado.
+    const t = store.current();
+    const m = t.matches.find((x) => x.played && x.homeId && x.awayId);
+    openMatchSheet(t.id, m.id);
+    const sh = sheet();
+    assert.equal(btn(sh, /Guardar/), undefined);
+    assert.ok([...sh.querySelectorAll('.stepper button')].every((b) => b.disabled));
+    assert.equal(btn(sh, /Cerrar/).disabled, false);
+    closeSheets();
+    // Sin datos: un aviso, sin "Crear equipos" ni "Datos de ejemplo".
+    const json = store.exportJson();
+    store.setLocked(false); store.clearAll(); store.setLocked(true);
+    renderFixture(root);
+    assert.match(root.textContent, /Todavía no hay campeonatos cargados/);
+    assert.equal(root.querySelector('.empty button, .empty a'), null);
+    store.setLocked(false); store.importJson(json);
+  } finally {
+    store.setLocked(false);
+  }
+});

@@ -72,7 +72,7 @@ export function openTeamSheet(teamId) {
         playerAvatar(p, 44, 'body', team), h('span', { class: 'pinfo' }, playerName(p),
           h('span', { class: 'counts' }, `PJ ${pt[p.id].pj} · ⚽ ${pt[p.id].goals} · 🤝 ${pt[p.id].assists} · 👑 ${pt[p.id].mvp}`))))))
         : h('p', { class: 'muted' }, 'Todavía no tiene jugadores.'),
-      h('div', { class: 'row wrap' },
+      store.isLocked() ? null : h('div', { class: 'row wrap' },
         h('button', { onclick: () => { close(); openPlayerForm(team.id); } }, '＋ Sumar jugador'),
         h('button', { class: 'ghost', onclick: () => { close(); openTeamForm(team.id); } }, '✏️ Escudo y colores'),
         players.length >= 2 ? h('button', { class: 'ghost', onclick: () => { close(); onNewFriendly(team.id); } }, '🤝 Amistoso') : null),
@@ -197,7 +197,7 @@ export function openPlayerSheet(playerId) {
             [st.pj, st.goals, st.assists, st.mvp, st.yellow, st.red].map((v) => h('td', {}, String(v)))))))),
       ] : h('p', { class: 'muted' }, 'Todavía no jugó partidos.'),
       h('div', { class: 'row wrap' },
-        h('button', { onclick: () => { close(); openPlayerForm(p.teamId, p.id); } }, '✏️ Editar jugador'),
+        store.isLocked() ? null : h('button', { onclick: () => { close(); openPlayerForm(p.teamId, p.id); } }, '✏️ Editar jugador'),
         team ? h('button', { class: 'ghost', onclick: () => { close(); openTeamSheet(team.id); } }, `Ver ${team.name}`) : null));
   });
 }

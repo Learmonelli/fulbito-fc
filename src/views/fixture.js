@@ -8,7 +8,6 @@ import { toast } from '../ui/toast.js';
 import { openSheet } from '../ui/sheet.js';
 import { openMatchSheet } from './matchSheet.js';
 import { openTournamentForm, openTournamentSettings } from './tournamentForm.js';
-import { openHelp } from './help.js';
 import { tournamentPicker, matchRow, teamById, tourTitle, FORMAT_LABELS, emptyCard, missing } from './common.js';
 
 // round: fecha elegida por campeonato · edit: modo "Ajustar fixture"
@@ -28,7 +27,7 @@ export function tourHeader(s, tour) {
       h('div', { class: 'grow' }, h('h2', { class: 'card-title' }, tourTitle(tour)),
         h('span', { class: 'tag' }, FORMAT_LABELS[tour.format]), ' ',
         h('span', { class: 'tag' }, `${tour.teamIds.length} equipos`)),
-      h('button', { class: 'ghost small icon-btn', 'aria-label': 'Editar campeonato', onclick: () => openTournamentSettings(tour) }, '⚙')),
+      store.isLocked() ? null : h('button', { class: 'ghost small icon-btn', 'aria-label': 'Editar campeonato', onclick: () => openTournamentSettings(tour) }, '⚙')),
     status);
 }
 
@@ -88,7 +87,7 @@ function roundsBox(s, tour) {
     round = rounds[idx]; ui.round[tour.id] = round; paint();
   };
   // Ajustar fixture: solo con partidos de liga sin jugar y antes del cuadro.
-  const canEdit = !tour.playoffsStarted && matches.some((m) => !m.played);
+  const canEdit = !store.isLocked() && !tour.playoffsStarted && matches.some((m) => !m.played);
   const editBtn = canEdit ? h('button', {
     class: `ghost small ${ui.edit[tour.id] ? 'on' : ''}`, 'aria-pressed': String(!!ui.edit[tour.id]),
     onclick: () => { ui.edit[tour.id] = !ui.edit[tour.id]; editBtn.classList.toggle('on', !!ui.edit[tour.id]); editBtn.setAttribute('aria-pressed', String(!!ui.edit[tour.id])); editBtn.textContent = ui.edit[tour.id] ? '✔ Listo' : '✏️ Ajustar fixture'; paint(); },
@@ -161,15 +160,18 @@ function playoffsCard(s, tour) {
     h('p', { class: pending ? 'muted' : '' }, pending
       ? `El cuadro se arma cuando termine la fase de liga. ${missing(pending, 'F')}.`
       : 'La fase de liga terminó. Ya podés armar el cuadro con los clasificados.'),
-    h('button', { disabled: pending > 0, onclick: () => { if (store.startPlayoffs(tour.id)) { toast('🏆 Cuadro armado.'); location.hash = '#/cuadro'; } } }, 'Armar el cuadro'));
+    store.isLocked() ? null : h('button', { disabled: pending > 0, onclick: () => { if (store.startPlayoffs(tour.id)) { toast('🏆 Cuadro armado.'); location.hash = '#/cuadro'; } } }, 'Armar el cuadro'));
 }
 
 export function noTournaments(s) {
+  // Quien solo mira (no es el admin): un aviso, sin botones que no puede usar.
+  if (store.isLocked()) {
+    return emptyCard('Bienvenido a Fulbito FC', 'Todavía no hay campeonatos cargados. Cuando el organizador los cargue, los vas a ver acá.');
+  }
   if (!s.teams.length) {
     return emptyCard('Bienvenido a Fulbito FC', 'Creá tus equipos, armá un campeonato y llevá la tabla, el cuadro y las estadísticas.',
       h('a', { class: 'btn', href: '#/equipos' }, '👥 Crear equipos'),
-      h('button', { class: 'ghost', onclick: () => { store.loadDemo(); toast('Datos de ejemplo cargados.'); } }, '🧪 Ver con datos de ejemplo'),
-      h('button', { class: 'ghost', onclick: () => openHelp() }, '❓ Cómo se usa'));
+      h('button', { class: 'ghost', onclick: () => { store.loadDemo(); toast('Datos de ejemplo cargados.'); } }, '🧪 Ver con datos de ejemplo'));
   }
   return emptyCard('Todavía no hay campeonatos', s.teams.length < 2 ? 'Necesitás al menos dos equipos para armar uno.' : 'Armá el primero con tus equipos.',
     s.teams.length < 2 ? h('a', { class: 'btn', href: '#/equipos' }, '👥 Ir a Equipos') : h('button', { onclick: openTournamentForm }, '🏆 Nuevo campeonato'));

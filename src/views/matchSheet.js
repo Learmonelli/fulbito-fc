@@ -20,7 +20,9 @@ export function openMatchSheet(tournamentId, matchId) {
   const home = teamById(s, m.homeId);
   const away = teamById(s, m.awayId);
   const ko = m.stage === 'ko';
-  const locked = !ko && tour.playoffsStarted;
+  const closedPhase = !ko && tour.playoffsStarted;
+  const viewer = store.isLocked(); // no es el admin: solo mira
+  const locked = closedPhase || viewer;
 
   return openSheet(`${home.name} vs ${away.name}`, (close) => {
     // Borrador local: nada se guarda hasta tocar "Guardar".
@@ -151,7 +153,7 @@ export function openMatchSheet(tournamentId, matchId) {
 
     const body = h('div', { class: 'match-sheet' },
       h('p', { class: 'muted center' }, `${tourTitle(tour)} · ${m.label || ''}`),
-      locked ? h('p', { class: 'admin-note center' }, '🔒 La fase de liga quedó cerrada al armarse el cuadro.') : null,
+      closedPhase ? h('p', { class: 'admin-note center' }, '🔒 La fase de liga quedó cerrada al armarse el cuadro.') : null,
       h('div', { class: 'card board scoreboard' }, scoreSide('home', home), h('b', { class: 'sc-sep' }, ':'), scoreSide('away', away)),
       pens,
       goalsNote,

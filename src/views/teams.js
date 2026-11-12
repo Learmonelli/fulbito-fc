@@ -34,8 +34,8 @@ function teamsList(s, matches, rerender) {
   const order = [...s.teams].sort((a, b) => tt[b.id].pts - tt[a.id].pts || tt[b.id].dg - tt[a.id].dg || a.name.localeCompare(b.name, 'es'));
   return [
     h('div', { class: 'row wrap' },
-      h('button', { onclick: () => openTeamForm() }, '＋ Nuevo equipo'),
-      !s.teams.length ? h('button', { class: 'ghost', onclick: () => { store.loadDemo(); toast('Datos de ejemplo cargados.'); rerender(); } }, '🧪 Datos de ejemplo') : null),
+      store.isLocked() ? null : h('button', { onclick: () => openTeamForm() }, '＋ Nuevo equipo'),
+      !s.teams.length && !store.isLocked() ? h('button', { class: 'ghost', onclick: () => { store.loadDemo(); toast('Datos de ejemplo cargados.'); rerender(); } }, '🧪 Datos de ejemplo') : null),
     s.teams.length
       ? h('ul', { class: 'pgrid team-grid' }, order.map((t) => {
         const st = tt[t.id];
