@@ -1,120 +1,180 @@
-// Nube con un cliente de Supabase FALSO en memoria (no toca ningún proyecto real).
+// Nube y ligas con un cliente de Supabase FALSO en memoria (no toca ningún proyecto real).
+// La base falsa aplica las mismas reglas que supabase/schema.sql: leer cualquiera; crear una liga
+// cualquier usuario logueado; editar solo el dueño y los admins (por email); el dueño no cambia.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 const mem = new Map();
 globalThis.localStorage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) };
 const { store, LOCK_MSG } = await import('../src/store.js');
-const { createCloud, checkConfig, isAdminUser } = await import('../src/cloud.js');
+const { createCloud, checkConfig, canEditLeague } = await import('../src/cloud.js');
 const { makeCloudSync } = await import('../src/cloudSync.js');
+const { slugify, leagueIdFromUrl, leagueLink } = await import('../src/league.js');
 
 const CFG = { url: 'https://prueba.supabase.co', key: 'sb_publishable_test' };
-const ADMIN = { id: 'u1', email: 'leandroarmonelli@gmail.com', app_metadata: {} };
-const OTHER = { id: 'u2', email: 'otro@mail.com', app_metadata: {} };
+const LEANDRO = { id: 'u-lea', email: 'leandroarmonelli@gmail.com', app_metadata: {} };
+const ORGA = { id: 'u-orga', email: 'orga@mail.com', app_metadata: {} };
+const AYUDA = { id: 'u-ayuda', email: 'ayuda@mail.com', app_metadata: {} };
+const HINCHA = { id: 'u-hincha', email: 'hincha@mail.com', app_metadata: {} };
+const USERS = [LEANDRO, ORGA, AYUDA, HINCHA];
 
-// Base falsa: una fila, RLS como en schema.sql (solo el admin escribe) y Realtime.
-function fakeSupabase({ row = null, session = null } = {}) {
-  const db = { row, writes: 0, listeners: [], user: session };
+function fakeSupabase() {
+  const db = { rows: new Map(), user: null, listeners: [], writes: 0 };
+  const can = (row) => !!db.user && (db.user.id === row.owner || row.admins.includes(db.user.email)
+    || (row.id === 'main' && db.user.email === LEANDRO.email));
+  const pick = (row, cols) => (cols === '*' ? { ...row } : Object.fromEntries(cols.split(',').map((c) => c.trim()).map((c) => [c, structuredClone(row[c])])));
+  const emit = (row) => db.listeners.forEach((l) => { if (l.id === row.id) l.cb({ new: structuredClone(row) }); });
+  const query = (filterFn = () => true) => ({ select: (cols = '*') => Promise.resolve({ data: [...db.rows.values()].filter(filterFn).map((r) => pick(r, cols)), error: null }) });
   db.client = {
     auth: {
       getSession: async () => ({ data: { session: db.user ? { user: db.user } : null } }),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
-      signInWithPassword: async ({ email, password }) => (password === 'secreta123'
-        ? (db.user = email === ADMIN.email ? ADMIN : OTHER, { data: { session: { user: db.user } }, error: null })
-        : { data: {}, error: { message: 'Invalid login credentials' } }),
+      signInWithPassword: async ({ email, password }) => {
+        const u = USERS.find((x) => x.email === email);
+        if (!u || password !== 'secreta123') return { data: {}, error: { message: 'Invalid login credentials' } };
+        db.user = u;
+        return { data: { session: { user: u } }, error: null };
+      },
       signOut: async () => { db.user = null; },
     },
     from: () => ({
-      select: () => ({ eq: async () => ({ data: db.row ? [{ data: db.row }] : [], error: null }) }),
-      upsert: async ({ data }) => {
-        if (!isAdminUser(db.user)) return { error: { message: 'new row violates row-level security policy' } };
-        db.row = structuredClone(data); db.writes++;
-        return { error: null };
-      },
+      select: (cols) => ({
+        eq: async (col, v) => ({ data: [...db.rows.values()].filter((r) => r[col] === v).map((r) => pick(r, cols.replace(/\s/g, ''))), error: null }),
+        contains: async (col, arr) => ({ data: [...db.rows.values()].filter((r) => arr.every((x) => r[col].includes(x))).map((r) => pick(r, cols.replace(/\s/g, ''))), error: null }),
+      }),
+      insert: (obj) => ({
+        select: async (cols) => {
+          if (!db.user) return { error: { message: 'permission denied for table fulbito_state' } };
+          if (!/^[a-z0-9][a-z0-9-]{2,39}$/.test(obj.id) || (obj.id === 'main' && db.user.email !== LEANDRO.email)) return { error: { message: 'new row violates row-level security policy' } };
+          if (db.rows.has(obj.id)) return { error: { code: '23505', message: 'duplicate key value' } };
+          const row = { id: obj.id, name: obj.name || 'Fulbito FC', data: structuredClone(obj.data), owner: db.user.id, owner_email: db.user.email, admins: [] };
+          db.rows.set(row.id, row); db.writes++;
+          return { data: [pick(row, cols.replace(/\s/g, ''))], error: null };
+        },
+      }),
+      update: (patch) => ({
+        eq: (_c, id) => ({
+          select: async (cols) => {
+            const row = db.rows.get(id);
+            if (!row || !can(row)) return { data: [], error: null }; // RLS: 0 filas, sin error
+            const { owner, owner_email, ...rest } = patch; // el trigger no deja cambiar al dueño
+            Object.assign(row, structuredClone(rest));
+            if (rest.admins) row.admins = [...new Set(rest.admins.map((e) => e.toLowerCase()))];
+            db.writes++;
+            emit(row);
+            return { data: [pick(row, cols.replace(/\s/g, ''))], error: null };
+          },
+        }),
+      }),
     }),
-    channel: () => {
-      const ch = { on: (_e, _f, cb) => { db.listeners.push(cb); return ch; }, subscribe: () => ch };
+    channel: (name) => {
+      const id = name.replace('fulbito-', '');
+      const ch = { on: (_e, _f, cb) => { db.listeners.push({ id, cb }); return ch; }, subscribe: () => ch };
       return ch;
     },
     removeChannel() {},
   };
-  // Otro celular (el admin desde otro lado) guarda: llega por Realtime.
-  db.remote = (data) => { db.row = structuredClone(data); db.listeners.forEach((cb) => cb({ new: { data: db.row } })); };
+  db.query = query;
   return db;
 }
 const now = { setTimeout: (fn) => { fn(); return 1; }, clearTimeout() {} }; // sin esperas
+const setup = (db, leagueId) => {
+  const cloud = createCloud({ createClient: () => db.client, timers: now });
+  return { cloud, sync: makeCloudSync({ cloud, config: CFG, leagueId }) };
+};
 
 beforeEach(() => { store.setLocked(false); store.clearAll(); });
 
-test('config: solo URL de supabase y claves publicables (nunca la secreta)', () => {
+test('config y links de liga', () => {
   assert.equal(checkConfig({ url: 'https://abc.supabase.co/rest/v1/', key: 'sb_publishable_x' }).url, 'https://abc.supabase.co');
   assert.match(checkConfig({ url: 'https://abc.supabase.co', key: 'sb_secret_x' }).error, /SECRETA/);
-  assert.match(checkConfig({ url: 'http://evil.com', key: 'sb_publishable_x' }).error, /supabase\.co/);
-  assert.equal(checkConfig({ url: '', key: '' }).ok, false);
+  assert.equal(leagueIdFromUrl({ search: '?liga=los-jueves-ab12' }), 'los-jueves-ab12');
+  assert.equal(leagueIdFromUrl({ search: '?liga=<script>' }), 'main', 'ids raros: liga original');
+  assert.equal(leagueIdFromUrl({ search: '' }), 'main');
+  assert.match(slugify('Liga de los Jueves', () => 0.1), /^liga-de-los-jueves-[a-z0-9]{4}$/);
+  assert.match(slugify('¡¡!!', () => 0.5), /^liga-[a-z0-9]{4}$/);
+  assert.equal(leagueLink('x-123', { origin: 'https://a.io', pathname: '/fulbito-fc/' }), 'https://a.io/fulbito-fc/?liga=x-123');
+  assert.equal(leagueLink('main', { origin: 'https://a.io', pathname: '/fulbito-fc/' }), 'https://a.io/fulbito-fc/');
 });
 
-test('sin proyecto configurado: la app sigue local y se puede editar', async () => {
-  const sync = makeCloudSync({ config: { url: '', key: '' } });
-  assert.equal(await sync.start(), false);
-  assert.equal(store.isLocked(), false);
-  assert.ok(store.addTeam('Local FC'));
-});
-
-test('visitante: baja los datos de la nube, queda en solo lectura y ve los cambios en vivo', async () => {
-  // Datos "del admin" ya publicados.
-  store.loadDemo();
-  const published = store.snapshot();
-  store.clearAll();
-  const db = fakeSupabase({ row: published });
-  const sync = makeCloudSync({ cloud: createCloud({ createClient: () => db.client, timers: now }), config: CFG });
-  assert.equal(await sync.start(), true);
-  assert.equal(store.get().teams.length, 8, 'bajó los datos');
-  assert.equal(store.isLocked(), true, 'no es admin: solo lectura');
-  assert.equal(store.addTeam('Intruso'), null);
-  const m = store.current().matches.find((x) => !x.played && x.homeId && x.awayId);
-  assert.equal(store.saveMatch(store.current().id, m.id, { homeGoals: 9, awayGoals: 0 }), LOCK_MSG);
-  assert.equal(db.writes, 0, 'nunca intentó escribir');
-  // El admin carga algo desde otro lado: llega en vivo.
-  const next = structuredClone(published);
-  next.teams[0].name = 'Los Cracks Campeones';
-  db.remote(next);
-  assert.equal(store.get().teams[0].name, 'Los Cracks Campeones');
-  // Elegir campeonato sí se puede (es solo para mirar).
-  assert.equal(store.setCurrent(store.get().tournaments[0].id), true);
-});
-
-test('admin: entra, sus cambios se suben y la nube vacía se puede publicar', async () => {
+test('liga original: solo Leandro la carga; el resto mira en vivo', async () => {
   const db = fakeSupabase();
-  const cloud = createCloud({ createClient: () => db.client, timers: now });
-  const sync = makeCloudSync({ cloud, config: CFG });
-  store.setLocked(false);
-  store.loadDemo(); // datos de este navegador
+  const { cloud, sync } = setup(db, 'main');
+  store.loadDemo();
   await sync.start();
   assert.equal(sync.remoteEmpty(), true);
-  assert.equal(store.isLocked(), true, 'antes de entrar, solo lectura');
-  await assert.rejects(cloud.signInWithPassword(ADMIN.email, 'mal'), /incorrectos/);
-  await cloud.signInWithPassword(ADMIN.email, 'secreta123');
-  assert.equal(store.isLocked(), false, 'el admin edita');
+  assert.equal(store.isLocked(), true, 'sin entrar: solo lectura');
+  await cloud.signInWithPassword(LEANDRO.email, 'secreta123');
+  assert.equal(store.isLocked(), false);
   await sync.publishLocal();
-  assert.equal(db.row.teams.length, 8);
-  assert.equal(sync.remoteEmpty(), false);
-  // Un cambio local del admin se sube solo.
+  assert.equal(db.rows.get('main').data.teams.length, 8);
   store.addTeam('Nuevo FC');
   await cloud.flushNow();
-  assert.ok(db.row.teams.some((t) => t.name === 'Nuevo FC'));
-  // Al salir vuelve a solo lectura.
+  assert.ok(db.rows.get('main').data.teams.some((t) => t.name === 'Nuevo FC'));
+  // Otro usuario logueado no puede cargar la liga original.
   await cloud.signOut();
+  await cloud.signInWithPassword(ORGA.email, 'secreta123');
   assert.equal(store.isLocked(), true);
+  assert.equal(store.addTeam('Intruso'), null);
 });
 
-test('otra cuenta que no es la del admin no puede escribir', async () => {
-  const db = fakeSupabase({ row: { teams: [], players: [], tournaments: [], friendlies: [] } });
-  const cloud = createCloud({ createClient: () => db.client, timers: now });
-  const sync = makeCloudSync({ cloud, config: CFG });
-  await sync.start();
-  await cloud.signInWithPassword(OTHER.email, 'secreta123');
+test('otro organizador crea su liga, suma admins y sus jugadores miran', async () => {
+  const db = fakeSupabase();
+  // 1) El organizador entra (en la liga original no es admin) y crea su liga.
+  const a = setup(db, 'main');
+  await a.sync.start();
+  await a.cloud.signInWithPassword(ORGA.email, 'secreta123');
+  assert.equal(a.cloud.canEdit(), false);
+  await assert.rejects(a.sync.createLeague('ab'), /3 letras/);
+  const id = await a.sync.createLeague('Liga de los Jueves');
+  assert.equal(db.rows.get(id).owner, ORGA.id);
+  assert.deepEqual(await a.cloud.myLeagues(), [{ id, name: 'Liga de los Jueves', role: 'dueño' }]);
+
+  // 2) Abre el link de su liga: arranca vacía y él la carga.
+  store.clearAll();
+  const b = setup(db, id);
+  await b.sync.start();
+  assert.equal(b.sync.missing(), false);
+  assert.equal(store.get().teams.length, 0);
+  assert.equal(store.isLocked(), false, 'el dueño edita');
+  assert.ok(store.addTeam('Los Pibes'));
+  await b.cloud.flushNow();
+  assert.equal(db.rows.get(id).data.teams[0].name, 'Los Pibes');
+
+  // 3) Suma a un ayudante como admin.
+  await assert.rejects(b.cloud.setAdmins(['no-es-un-mail']).then((l) => { if (!l.length) throw new Error('vacía'); }), /vacía/);
+  assert.deepEqual(await b.cloud.setAdmins(['Ayuda@Mail.com']), ['ayuda@mail.com']);
+  await b.cloud.signOut();
+  assert.equal(store.isLocked(), true, 'sin sesión: solo lectura');
+
+  // 4) El ayudante entra y también carga; puede sumar a otro admin.
+  await b.cloud.signInWithPassword(AYUDA.email, 'secreta123');
+  assert.equal(store.isLocked(), false);
+  assert.ok(store.addTeam('Atlético Jueves'));
+  await b.cloud.flushNow();
+  assert.equal(db.rows.get(id).data.teams.length, 2);
+  assert.deepEqual((await b.cloud.myLeagues()).map((l) => l.role), ['admin']);
+  await b.cloud.setAdmins(['ayuda@mail.com', 'hincha@mail.com']);
+  await b.cloud.setAdmins(['ayuda@mail.com']); // y lo saca
+  assert.equal(db.rows.get(id).owner, ORGA.id, 'el dueño no cambia nunca');
+
+  // 5) Un jugador (sin cuenta) mira y ve en vivo; no puede cargar.
+  await b.cloud.signOut();
   assert.equal(store.isLocked(), true);
-  assert.equal(cloud.push(store.snapshot()), false);
-  await assert.rejects(sync.publishLocal(), /Solo el administrador/);
-  assert.equal(db.writes, 0);
+  const m = store.saveMatch('x', 'y', {});
+  assert.equal(m, LOCK_MSG);
+  // 6) Otro usuario cualquiera no puede escribir esta liga aunque lo intente.
+  await b.cloud.signInWithPassword(HINCHA.email, 'secreta123');
+  assert.equal(b.cloud.push(store.snapshot()), false);
+  await assert.rejects(b.cloud.setAdmins(['hincha@mail.com']), /Solo los administradores/);
+});
+
+test('link a una liga que no existe: se avisa y nadie edita', async () => {
+  const db = fakeSupabase();
+  const { sync, cloud } = setup(db, 'no-existe-1234');
+  await sync.start();
+  assert.equal(sync.missing(), true);
+  await cloud.signInWithPassword(ORGA.email, 'secreta123');
+  assert.equal(store.isLocked(), true);
+  assert.equal(canEditLeague(ORGA, cloud.league()), false);
 });

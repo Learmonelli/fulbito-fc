@@ -6,11 +6,13 @@ import { splitGroups, groupName, qualifiers, worldCupPairs } from './logic/group
 import { standings } from './logic/standings.js';
 import { sanitizeFace, randomFace } from './pmAvatar.js';
 import { EVENT_TYPES, eventGoals } from './domain/stats.js';
+import { leagueIdFromUrl, storageKey } from './league.js';
 
 export const FORMATS = ['league', 'cup', 'league_cup', 'groups'];
 export const PATTERNS = ['solid', 'halves', 'stripes', 'band', 'chevron', 'quarters'];
 
-const KEY = 'fulbito_fc_v1';
+// Cada liga (?liga=<id>) guarda sus datos locales aparte; la original usa la clave de siempre.
+const KEY = storageKey(leagueIdFromUrl());
 const HEX = /^#[0-9a-fA-F]{6}$/;
 // Solo imágenes raster que la app generó (nunca SVG, que puede traer scripts).
 const LOGO = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
@@ -25,6 +27,7 @@ let errorHandler = () => {};
 const uid = () => crypto.randomUUID();
 const clean = (s, max = 60) => String(s ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
 const empty = () => ({ teams: [], players: [], tournaments: [], currentId: null, friendlies: [] });
+export const emptyState = () => ({ app: 'fulbito-fc', version: 1, ...empty() });
 
 function shuffled(arr, rnd = Math.random) {
   const a = [...arr];

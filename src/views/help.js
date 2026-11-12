@@ -63,9 +63,17 @@ export const TOPICS = [
     'El palmarés cuenta los títulos de cada equipo.',
     'Cada campeonato muestra al campeón, el 2.° y el 3.°, el goleador y quién fue más veces figura. Los que siguen en juego dicen cuántos partidos faltan.',
   ]],
+  ['ligas', '🏆 Tu liga, link y administradores', null, [
+    'Cada liga es un torneo con todos sus equipos y tiene su propio link. Con el link, cualquiera mira en vivo: tabla, cuadro, estadísticas y campeones.',
+    'Solo los administradores cargan. Los demás ven todo, sin botones para editar.',
+    '¿Organizás un torneo? En 💾 entrá con tu email y tocá "＋ Crear una liga nueva". Quedás como dueño.',
+    'En 💾 → "👥 Administradores" sumás a otros por su email (por ejemplo, un delegado de cada equipo). Cualquier administrador puede sumar o sacar a otros; al dueño no lo saca nadie.',
+    'Para compartir: 💾 → "🔗 Compartir link" y mandalo por WhatsApp.',
+    'Para tenerla como app: 💾 → "📲 Instalar en el celular".',
+  ]],
   ['datos', '💾 Nube, copias y aspecto', null, [
     'Los datos viven en la nube: todos ven lo mismo y los cambios llegan solos a cada celular.',
-    'Solo el administrador carga o cambia datos; los demás ven todo pero sin botones para editar. El admin entra desde 💾 con su email y contraseña.',
+    'Los administradores entran desde 💾 con su email y contraseña (la primera vez, con un link al mail).',
     'En 💾 también se puede descargar una copia de todo. Importar una copia (solo el admin) reemplaza todo lo cargado.',
     'El botón ✨ Moderno / 🎮 Pixel cambia el aspecto de la app. Los datos son los mismos.',
   ]],

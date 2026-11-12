@@ -16,6 +16,7 @@ import { renderFriendlies, openFriendlyForm } from './views/friendlies.js';
 import { setFriendlyLauncher } from './views/sheets.js';
 import { openHelp } from './views/help.js';
 import { makeCloudSync } from './cloudSync.js';
+import { MAIN, isLeagueId, leagueIdFromUrl, leagueLink } from './league.js';
 import { cloudSection } from './ui/cloudPanel.js';
 import { applyTheme, setTheme, onTheme, isModern } from './theme.js';
 
@@ -41,9 +42,27 @@ const route = () => TABS.find((t) => t.id === location.hash.split('/')[1]) ?? TA
 const nav = h('nav', { class: 'bottom-nav', 'aria-label': 'Secciones' }, TABS.map((t) =>
   h('a', { href: `#/${t.id}`, 'data-tab': t.id }, h('span', { class: 'ico', 'aria-hidden': 'true' }, t.ico), t.label)));
 
+// ---- Liga del link (?liga=<id>) ----
+// App instalada en el celular: si se abre sin ?liga= y la última vez se usó otra liga, vuelve a esa.
+const LAST = 'fulbito_last_league';
+const standalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+if (standalone && !new URLSearchParams(location.search).has('liga')) {
+  const last = localStorage.getItem(LAST);
+  if (isLeagueId(last) && last !== MAIN) location.replace(leagueLink(last));
+}
+try { localStorage.setItem(LAST, leagueIdFromUrl()); } catch { /* sin almacenamiento */ }
+
 // ---- Nube (Supabase) ----
 const sync = makeCloudSync();
 sync.cloud.onStatus((st, d) => { if (st === 'error' && d) toast(`☁️ ${d}`, { ms: 7000 }); });
+// Nombre de la liga bajo "Fulbito FC" (solo en las ligas nuevas; la original queda como estaba).
+const leagueName = h('p', { class: 'brand-league', hidden: true });
+sync.cloud.onLeague((lg) => {
+  const show = sync.leagueId !== MAIN && lg?.exists;
+  leagueName.hidden = !show;
+  leagueName.textContent = show ? lg.name : '';
+  if (show) document.title = `${lg.name} · Fulbito FC`;
+});
 
 function downloadCopy() {
   const url = URL.createObjectURL(new Blob([store.exportJson()], { type: 'application/json' }));
@@ -129,7 +148,7 @@ app.append(
   h('header', { class: 'app-header' },
     h('a', { class: 'brand', href: '#/fixture', 'aria-label': 'Fulbito FC, inicio' },
       crestSlot,
-      h('p', { class: 'brand-name' }, 'Fulbito FC')),
+      h('div', {}, h('p', { class: 'brand-name' }, 'Fulbito FC'), leagueName)),
     h('div', { class: 'header-tools' },
       modeBtn,
       h('button', { class: 'ghost small icon-btn', 'aria-label': 'Ayuda: cómo se usa', title: 'Ayuda', onclick: () => openHelp(route().id) }, '❓'),
@@ -137,4 +156,5 @@ app.append(
   main, nav);
 paintMode();
 paint();
-sync.start(); // si hay proyecto de Supabase configurado, baja los datos y queda escuchando
+// Si hay proyecto de Supabase configurado, baja la liga del link y queda escuchando.
+sync.start().then(() => { if (sync.missing()) toast('⚠ Este link no corresponde a ninguna liga. Revisá que esté completo.', { ms: 10000 }); });

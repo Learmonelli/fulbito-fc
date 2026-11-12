@@ -241,3 +241,12 @@ button.ko-card:hover:not(:disabled) { border-color: var(--gold); }
 .cloud-box { display: grid; gap: 8px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
 .ro-pill { border-color: var(--gold); white-space: nowrap; }
 .data-title { margin: 4px 0 8px; }
+
+/* Ligas, administradores e instalación */
+.share-box { display: grid; gap: 8px; }
+.share-box input { font-size: .85rem; }
+.admins-list .prow { min-height: 44px; }
+.admins-list .grow { overflow-wrap: anywhere; }
+.install-box { display: grid; gap: 6px; }
+.brand-league { margin: 0; font-size: .78rem; color: var(--muted); }
+[data-theme="pixel"] .brand-league { font-size: 15px; }
