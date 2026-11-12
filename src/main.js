@@ -17,7 +17,6 @@ import { setFriendlyLauncher } from './views/sheets.js';
 import { openHelp } from './views/help.js';
 import { makeCloudSync } from './cloudSync.js';
 import { cloudSection } from './ui/cloudPanel.js';
-import { tourTitle } from './views/common.js';
 import { applyTheme, setTheme, onTheme, isModern } from './theme.js';
 
 // Pixel o moderno: el último que se eligió en este navegador (botón 🎮/✨ del encabezado).
@@ -101,8 +100,7 @@ function paint() {
   nav.querySelectorAll('a').forEach((a) => {
     if (a.dataset.tab === tab.id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
-  const cur = store.current();
-  subtitle.textContent = cur ? tourTitle(cur) : 'Campeonatos entre amigos';
+  subtitle.textContent = 'Campeonatos entre amigos'; // el campeonato elegido ya se ve en cada pestaña
   tab.render(main);
   document.title = `${tab.title} · Fulbito FC`;
   window.scrollTo(0, y);
