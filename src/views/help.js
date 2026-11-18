@@ -19,6 +19,7 @@ export const TOPICS = [
   ['partido', '⚽ Armar equipos y cargar el partido', [
     'Armar equipos: tocá A o B al lado de cada jugador. Los elegidos suben arriba, agrupados por equipo. Tocá otra vez el mismo botón para sacarlo.',
     'Goles: tocá ⚽ al lado del que lo hizo y 🤝 al que asistió. Cada acción tiene "Deshacer" en el aviso de abajo.',
+    'Si no se acuerdan quién hizo un gol: tocá "⚽ (equipo): sin autor" arriba. Suma al resultado, queda marcado como "sin autor" y no se le cuenta a nadie. Después lo completás con ✎.',
     'No puede haber más asistencias que goles de ese equipo.',
     'Gol en contra: "🙈 Agregar gol en contra" (abajo de los goles). Suma para el otro equipo y queda anotado a quien lo hizo.',
     'Tocá un gol de la lista para corregirlo (cambiar el goleador o pasarlo a gol en contra).',
