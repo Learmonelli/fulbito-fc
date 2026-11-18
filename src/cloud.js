@@ -14,12 +14,22 @@ export const DEFAULT_CONFIG = {
 };
 export const GROUP_MODE = 'interno';
 const TABLE = { players: 'fulbito_players', matches: 'fulbito_matches' };
-const LEAGUE_COLS = 'id, name, owner, owner_email, admins, mode:data->>mode, settings:data->settings';
+// Los emails del dueño y de los admins (owner_email, admins) son privados: no se leen (ver privacy.sql).
+const LEAGUE_COLS = 'id, name, owner, mode:data->>mode, settings:data->settings';
+const LEGACY_COLS = 'owner_email, admins'; // solo si la base todavía no tiene privacy.sql
+const missingFn = (e) => /PGRST202|Could not find the function|function .* does not exist/i.test(`${e?.code} ${e?.message}`);
 
 // ¿Este usuario puede finalizar, reabrir y borrar en este grupo? (mismo criterio que fulbito_can_edit en SQL)
+// El rol lo responde la base (fulbito_my_role): 'owner' | 'admin' | null.
 export function canEditLeague(user, league) {
   if (!user || !league?.exists) return false;
-  return user.id === league.owner || (league.admins || []).includes(cleanEmail(user.email));
+  return league.role === 'owner' || league.role === 'admin';
+}
+// Con la lista de emails (solo base vieja, sin privacy.sql): mismo criterio que fulbito_can_edit.
+export function roleFromAdmins(user, league, ownerEmail, admins) {
+  if (!user || !league?.exists) return null;
+  if (user.id === league.owner) return 'owner';
+  return (admins || []).includes(cleanEmail(user.email)) ? 'admin' : null;
 }
 
 export function checkConfig(cfg) {
@@ -55,7 +65,7 @@ const isBadToken = (e) => /JWT|PGRST30/i.test(`${e?.code} ${e?.message}`);
 
 export function createCloud({ createClient = realCreateClient, timers = globalThis } = {}) {
   let client = null; let channel = null; let user = null; let groupId = null;
-  let league = null; // { id, name, owner, ownerEmail, admins, mode, settings, exists }
+  let league = null; // { id, name, owner, mode, settings, role, exists }
   let status = 'off'; let detail = '';
   const queue = new Map(); // `${tipo}:${id}` -> { kind, op, row | id }
   const known = new Set(); // filas que ya están en la nube (para saber si se crean o se actualizan)
@@ -68,12 +78,30 @@ export function createCloud({ createClient = realCreateClient, timers = globalTh
   const setLeague = (row, id) => {
     league = row
       ? {
-        id: row.id, name: row.name || 'Mi grupo', owner: row.owner ?? null, ownerEmail: row.owner_email ?? '',
-        admins: row.admins ?? [], mode: row.mode ?? row.data?.mode ?? null, settings: row.settings ?? row.data?.settings ?? {}, exists: true,
+        id: row.id, name: row.name || 'Mi grupo', owner: row.owner ?? null,
+        mode: row.mode ?? row.data?.mode ?? null, settings: row.settings ?? row.data?.settings ?? {}, role: league?.id === row.id ? league.role : null, exists: true,
       }
-      : { id, name: 'Mi grupo', owner: null, ownerEmail: '', admins: [], mode: null, settings: {}, exists: false };
+      : { id, name: 'Mi grupo', owner: null, mode: null, settings: {}, role: null, exists: false };
     leagueFns.forEach((fn) => fn(league));
   };
+
+  // Pregunta a la base qué es el usuario en este grupo (dueño, admin o nada) y avisa si cambió.
+  async function refreshRole() {
+    if (!client || !league?.exists) return;
+    let role = null;
+    if (user) {
+      const r = await client.rpc('fulbito_my_role', { p_league: league.id });
+      if (!r.error) role = r.data ?? null;
+      else if (missingFn(r.error)) { // base sin privacy.sql: se calcula con los emails, como antes
+        const old = await client.from('fulbito_state').select(LEGACY_COLS).eq('id', league.id);
+        const row = old.data?.[0];
+        role = row ? roleFromAdmins(user, league, row.owner_email, row.admins) : null;
+      }
+    }
+    if (role === league.role) return;
+    league = { ...league, role };
+    leagueFns.forEach((fn) => fn(league));
+  }
 
   async function fetchAll(kind) {
     const out = []; const PAGE = 1000;
@@ -183,7 +211,8 @@ export function createCloud({ createClient = realCreateClient, timers = globalTh
     user: () => user,
     league: () => league,
     canEdit: () => canEditLeague(user, league),
-    isOwner: () => !!user && !!league?.exists && user.id === league.owner,
+    isOwner: () => !!user && !!league?.exists && league.role === 'owner',
+    refreshRole,
     onStatus(fn) { statusFns.add(fn); return () => statusFns.delete(fn); },
     onAuth(fn) { authFns.add(fn); return () => authFns.delete(fn); },
     onLeague(fn) { leagueFns.add(fn); return () => leagueFns.delete(fn); },
@@ -205,7 +234,7 @@ export function createCloud({ createClient = realCreateClient, timers = globalTh
         if (client.auth) {
           const { data } = await client.auth.getSession();
           setUser(data?.session?.user);
-          client.auth.onAuthStateChange((_e, session) => setUser(session?.user));
+          client.auth.onAuthStateChange((_e, session) => { setUser(session?.user); refreshRole().then(() => authFns.forEach((fn) => fn(user))); });
         }
         if (!leagueId) { setLeague(null, null); setStatus('ok'); return { players: [], matches: [] }; }
         let res = await client.from('fulbito_state').select(LEAGUE_COLS).eq('id', leagueId);
@@ -218,6 +247,7 @@ export function createCloud({ createClient = realCreateClient, timers = globalTh
         if (res.error) throw res.error;
         const row = Array.isArray(res.data) ? res.data[0] : res.data;
         setLeague(row, leagueId);
+        await refreshRole();
         if (!league.exists || league.mode !== GROUP_MODE) { setStatus('ok'); return { players: [], matches: [] }; }
         const [players, matches] = await Promise.all([fetchAll('players'), fetchAll('matches')]);
         return { players, matches };
@@ -239,7 +269,9 @@ export function createCloud({ createClient = realCreateClient, timers = globalTh
         });
       }
       channel.on('postgres_changes', { event: '*', schema: 'public', table: 'fulbito_state', filter: `id=eq.${groupId}` }, (p) => {
-        if (p.new?.id) setLeague({ ...p.new, mode: p.new.data?.mode, settings: p.new.data?.settings }, groupId);
+        if (!p.new?.id) return;
+        setLeague({ ...p.new, mode: p.new.data?.mode, settings: p.new.data?.settings }, groupId);
+        refreshRole(); // pudieron cambiar los admins
       });
       // Supabase reintenta solo la conexión en vivo; si se corta se avisa y cuando vuelve el indicador regresa a verde.
       channel.subscribe((s) => {
@@ -286,28 +318,48 @@ export function createCloud({ createClient = realCreateClient, timers = globalTh
     // Grupos donde el usuario es dueño o administrador.
     async myLeagues() {
       if (!client || !user) return [];
-      const email = cleanEmail(user.email);
-      const cols = 'id, name, owner, mode:data->>mode';
-      const [own, adm] = await Promise.all([
-        client.from('fulbito_state').select(cols).eq('owner', user.id),
-        email ? client.from('fulbito_state').select(cols).contains('admins', [email]) : { data: [] },
-      ]);
+      const r = await client.rpc('fulbito_my_leagues');
+      let rows = r.data || [];
+      if (r.error) {
+        if (!missingFn(r.error)) return [];
+        const email = cleanEmail(user.email); // base sin privacy.sql
+        const cols = 'id, name, owner, mode:data->>mode';
+        const [own, adm] = await Promise.all([
+          client.from('fulbito_state').select(cols).eq('owner', user.id),
+          email ? client.from('fulbito_state').select(cols).contains('admins', [email]) : { data: [] },
+        ]);
+        rows = [...(own.data || []).map((l) => ({ ...l, role: 'owner' })), ...(adm.data || []).map((l) => ({ ...l, role: 'admin' }))];
+      }
       const seen = new Set();
-      return [...(own.data || []), ...(adm.data || [])]
-        .filter((l) => l.mode === GROUP_MODE && !seen.has(l.id) && seen.add(l.id))
-        .map((l) => ({ id: l.id, name: l.name, role: l.owner === user.id ? 'dueño' : 'admin' }));
+      return rows.filter((l) => l.mode === GROUP_MODE && !seen.has(l.id) && seen.add(l.id))
+        .map((l) => ({ id: l.id, name: l.name, role: l.role === 'owner' ? 'dueño' : 'admin' }));
+    },
+    // Emails del dueño y de los admins: solo los ve un dueño o admin del grupo.
+    async listAdmins() {
+      if (!client || !league?.exists || !api.canEdit()) return { ownerEmail: '', admins: [] };
+      const r = await client.rpc('fulbito_league_admins', { p_league: league.id });
+      if (!r.error) {
+        const rows = r.data || [];
+        return { ownerEmail: rows.find((x) => x.role === 'owner')?.email || '', admins: rows.filter((x) => x.role === 'admin').map((x) => x.email) };
+      }
+      if (!missingFn(r.error)) throw new Error(friendly(r.error));
+      const old = await client.from('fulbito_state').select(LEGACY_COLS).eq('id', league.id);
+      const row = old.data?.[0] || {};
+      return { ownerEmail: row.owner_email || '', admins: row.admins || [] };
     },
     // Cambia la lista de administradores (por email). Lo puede hacer el dueño o cualquier admin.
     async setAdmins(emails) {
       if (!client || !league?.exists) throw new Error('El grupo todavía no está en la nube.');
       if (!api.canEdit()) throw new Error('Solo los administradores del grupo pueden cambiar eso.');
-      const list = [...new Set((emails || []).map(cleanEmail).filter(isEmail))].filter((e) => e !== league.ownerEmail);
+      const { ownerEmail } = await api.listAdmins();
+      const list = [...new Set((emails || []).map(cleanEmail).filter(isEmail))].filter((e) => e !== ownerEmail);
       if (list.length > 20) throw new Error('Como mucho 20 administradores por grupo.');
       const { data, error } = await client.from('fulbito_state').update({ admins: list }).eq('id', league.id).select(LEAGUE_COLS);
       if (error) throw new Error(friendly(error));
       if (!(data || []).length) throw new Error(friendly('row-level security'));
       setLeague(data[0], league.id);
-      return league.admins;
+      await refreshRole();
+      return (await api.listAdmins()).admins;
     },
     async renameLeague(name) {
       if (!client || !league?.exists || !api.canEdit()) throw new Error('Solo los administradores pueden cambiar el nombre.');
@@ -364,6 +416,8 @@ export function createCloud({ createClient = realCreateClient, timers = globalTh
       const { data, error } = await client.auth.signInWithPassword({ email: String(email).trim(), password });
       if (error) throw new Error(friendly(error));
       setUser(data?.session?.user ?? data?.user);
+      await refreshRole();
+      authFns.forEach((fn) => fn(user));
     },
     // Link al mail: entra (y si es la primera vez, crea la cuenta). Vuelve a esta misma página.
     async signInWithEmail(email) {
@@ -383,6 +437,7 @@ export function createCloud({ createClient = realCreateClient, timers = globalTh
     async signOut() {
       if (client?.auth) await client.auth.signOut();
       setUser(null);
+      if (league) { league = { ...league, role: null }; leagueFns.forEach((fn) => fn(league)); }
     },
     disconnect() {
       if (channel && client?.removeChannel) client.removeChannel(channel);

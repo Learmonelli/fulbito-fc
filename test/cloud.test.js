@@ -10,7 +10,7 @@ globalThis.localStorage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), se
 globalThis.document = { documentElement: { dataset: {} } }; // lo mínimo que pide theme.js (colores)
 
 const { store } = await import('../src/store.js');
-const { createCloud, checkConfig, canEditLeague } = await import('../src/cloud.js');
+const { createCloud, checkConfig, canEditLeague, roleFromAdmins } = await import('../src/cloud.js');
 const { makeSession } = await import('../src/cloudSession.js');
 const { parseLeagueInput, leagueIdFromUrl, ligaFcLink, slugify } = await import('../src/league.js');
 const { getGroupSettings } = await import('../src/groupSettings.js');
@@ -47,14 +47,18 @@ function fakeDb() {
     seed(kind, lid, row);
     emit(`fulbito_${kind}`, { eventType: 'UPDATE', new: { id: row.id, league_id: lid, data: clone(row) } });
   };
-  const view = (r) => ({ id: r.id, name: r.name, owner: r.owner, owner_email: r.owner_email, admins: clone(r.admins), mode: r.data.mode ?? null, settings: clone(r.data.settings ?? null) });
+  const view = (r) => ({ id: r.id, name: r.name, owner: r.owner, mode: r.data.mode ?? null, settings: clone(r.data.settings ?? null) });
+  const PRIVATE = /owner_email|admins/;
+  db.privateReads = 0;
   const netFail = () => { if (db.fail > 0) { db.fail--; return { error: { message: 'Failed to fetch' } }; } return null; };
 
+  const denied = { data: null, error: { code: '42501', message: 'permission denied for table fulbito_state' } };
   const stateApi = {
-    select: () => {
+    select: (cols = '') => {
+      if (PRIVATE.test(cols)) { db.privateReads++; return { eq: async () => denied, contains: async () => denied }; }
       const api = {
         eq: async (c, v) => (db.failFetch ? { data: null, error: { message: 'Failed to fetch' } } : { data: [...db.state.values()].filter((r) => r[c] === v).map(view), error: null }),
-        contains: async (c, arr) => ({ data: [...db.state.values()].filter((r) => arr.every((x) => r[c].includes(x))).map(view), error: null }),
+        contains: async () => { db.privateReads++; return denied; }, // filtrar por admins también es leerlos
       };
       return api;
     },
@@ -73,7 +77,7 @@ function fakeDb() {
           const row = db.state.get(id);
           if (!row || !isAdmin(id)) return { data: [], error: null }; // RLS: 0 filas, sin error
           if (patch.name) row.name = patch.name;
-          if (patch.admins) row.admins = [...new Set(patch.admins)];
+          if (patch.admins) row.admins = [...new Set(patch.admins.map((e) => e.toLowerCase()))];
           if (patch.data) row.data = clone(patch.data);
           return { data: [view(row)], error: null };
         },
@@ -168,6 +172,21 @@ function fakeDb() {
     },
     from: (t) => (t === 'fulbito_state' ? stateApi : t === 'fulbito_backups' ? backupsApi : rowsApi(t === 'fulbito_players' ? 'players' : 'matches')),
     rpc: async (name, args) => {
+      if (name === 'fulbito_my_role') {
+        const lg = db.state.get(args.p_league);
+        if (!db.user || !lg) return { data: null, error: null };
+        return { data: db.user.id === lg.owner ? 'owner' : lg.admins.includes(db.user.email) ? 'admin' : null, error: null };
+      }
+      if (name === 'fulbito_league_admins') {
+        const lg = db.state.get(args.p_league);
+        if (!lg || !isAdmin(args.p_league)) return { data: [], error: null };
+        return { data: [{ email: lg.owner_email, role: 'owner' }, ...lg.admins.map((e) => ({ email: e, role: 'admin' }))], error: null };
+      }
+      if (name === 'fulbito_my_leagues') {
+        if (!db.user) return { data: [], error: null };
+        const rows = [...db.state.values()].filter((r) => r.owner === db.user.id || r.admins.includes(db.user.email));
+        return { data: rows.map((r) => ({ id: r.id, name: r.name, role: r.owner === db.user.id ? 'owner' : 'admin', mode: r.data.mode ?? null })), error: null };
+      }
       if (name !== 'fulbito_restore_interno') return { error: { message: 'no existe' } };
       if (!isAdmin(args.p_league)) return { error: { code: '42501', message: 'Solo los administradores de la liga pueden restaurar copias' } };
       for (const kind of ['players', 'matches']) for (const k of [...db[kind].keys()]) if (k.startsWith(`${args.p_league}|`)) db[kind].delete(k);
@@ -214,13 +233,18 @@ test('config y links: rechaza la clave secreta, entiende links y códigos de gru
   assert.match(slugify('Los del Jueves', () => 0), /^los-del-jueves-[a-z0-9]{4}$/);
 });
 
-test('quién administra: el dueño y los emails de admins (sin importar mayúsculas)', () => {
-  const lg = { exists: true, owner: OWNER.id, admins: [ADMIN.email] };
-  assert.equal(canEditLeague(OWNER, lg), true);
-  assert.equal(canEditLeague({ id: 'x', email: 'ADMIN@mail.com' }, lg), true);
-  assert.equal(canEditLeague(FAN, lg), false);
-  assert.equal(canEditLeague(null, lg), false);
-  assert.equal(canEditLeague(OWNER, { exists: false }), false);
+test('quién administra: lo responde la base (dueño o admin); con una base vieja, por los emails', () => {
+  const lg = (role) => ({ exists: true, owner: OWNER.id, role });
+  assert.equal(canEditLeague(OWNER, lg('owner')), true);
+  assert.equal(canEditLeague(ADMIN, lg('admin')), true);
+  assert.equal(canEditLeague(FAN, lg(null)), false);
+  assert.equal(canEditLeague(null, lg('owner')), false, 'sin cuenta, nunca');
+  assert.equal(canEditLeague(OWNER, { exists: false, role: 'owner' }), false);
+  // Base sin privacy.sql: mismo criterio que fulbito_can_edit, con los emails.
+  const old = { exists: true, owner: OWNER.id };
+  assert.equal(roleFromAdmins(OWNER, old, OWNER.email, []), 'owner');
+  assert.equal(roleFromAdmins({ id: 'x', email: 'ADMIN@mail.com' }, old, OWNER.email, [ADMIN.email]), 'admin');
+  assert.equal(roleFromAdmins(FAN, old, OWNER.email, [ADMIN.email]), null);
 });
 
 test('abrir un grupo: baja jugadores, partidos y ajustes; sin login nadie es administrador', async () => {
@@ -440,4 +464,33 @@ test('modo grupo: no se puede importar ni cargar ejemplos ni borrar todo', async
   assert.equal(store.loadDemo(), false);
   assert.equal(store.clearAll(), false);
   assert.equal(store.get().players.length, 4);
+});
+
+test('privacidad: la app nunca pide los emails de la tabla; el admin ve la lista con la función', async () => {
+  const db = fakeDb(); db.seedGroup();
+  let r = setup(db);
+  await r.session.start();
+  assert.deepEqual(await r.cloud.listAdmins(), { ownerEmail: '', admins: [] }, 'sin ser admin no recibe emails');
+  store.detachSync();
+  db.user = ADMIN; r = setup(db);
+  await r.session.start();
+  assert.equal(r.cloud.canEdit(), true, 'el admin invitado se reconoce por la función, sin leer emails');
+  assert.equal(r.cloud.isOwner(), false);
+  assert.deepEqual(await r.cloud.listAdmins(), { ownerEmail: OWNER.email, admins: [ADMIN.email] });
+  await r.cloud.setAdmins([ADMIN.email, 'otra@mail.com']);
+  assert.deepEqual((await r.cloud.listAdmins()).admins, [ADMIN.email, 'otra@mail.com']);
+  assert.equal((await r.cloud.myLeagues()).length, 1);
+  assert.equal(db.privateReads, 0, 'ninguna consulta pidió owner_email ni admins');
+});
+
+test('privacidad: al entrar o salir de la cuenta, el rol se vuelve a preguntar', async () => {
+  const db = fakeDb(); db.seedGroup();
+  const { session, cloud } = setup(db);
+  await session.start();
+  assert.equal(store.canAdmin(), false);
+  await cloud.signInWithPassword('dueno@mail.com', 'secreta123');
+  assert.equal(cloud.isOwner(), true);
+  assert.equal(store.canAdmin(), true, 'apenas entra, ya puede finalizar');
+  await cloud.signOut();
+  assert.equal(store.canAdmin(), false, 'al salir, deja de poder');
 });

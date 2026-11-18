@@ -98,8 +98,11 @@ function adminsBox(session) {
   const { cloud } = session;
   const box = h('div', { class: 'admins-box' });
   const err = h('p', { class: 'error', role: 'alert' });
-  const paint = () => {
-    const lg = cloud.league();
+  // Los emails son privados: se piden a la base y solo los recibe un dueño o admin.
+  const paint = async () => {
+    fill(box, h('h3', { class: 'list-heading' }, '👥 Administradores'), h('p', { class: 'muted small-note' }, 'Cargando…'));
+    let lg;
+    try { lg = await cloud.listAdmins(); } catch (ex) { fill(box, h('p', { class: 'error' }, ex.message)); return; }
     const input = h('input', { type: 'email', placeholder: 'email@ejemplo.com', 'aria-label': 'Email del nuevo administrador', autocomplete: 'off' });
     const save = async (list, okMsg) => {
       err.textContent = '';
