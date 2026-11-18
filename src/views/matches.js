@@ -1,3 +1,4 @@
+import { getGroupSettings } from '../groupSettings.js';
 import { h } from '../dom.js';
 import { store } from '../store.js';
 import { collapsible } from '../collapsible.js';
@@ -14,8 +15,8 @@ export function openNewMatch() {
   openSheet('Nuevo partido', (close) => {
     const date = h('input', { type: 'date', value: todayStr(), required: true, 'aria-label': 'Fecha' });
     const rival = h('input', { type: 'text', maxlength: 40, placeholder: 'Nombre del rival', 'aria-label': 'Rival' });
-    const nameA = h('input', { type: 'text', maxlength: 30, value: 'Claros', 'aria-label': 'Equipo A' });
-    const nameB = h('input', { type: 'text', maxlength: 30, value: 'Oscuros', 'aria-label': 'Equipo B' });
+    const nameA = h('input', { type: 'text', maxlength: 30, value: getGroupSettings().teamAName, 'aria-label': 'Equipo A' });
+    const nameB = h('input', { type: 'text', maxlength: 30, value: getGroupSettings().teamBName, 'aria-label': 'Equipo B' });
     const modeIn = h('input', { type: 'radio', name: 'mode', value: 'interno', checked: true });
     const modeRival = h('input', { type: 'radio', name: 'mode', value: 'rival' });
     const internal = h('div', { class: 'row' }, h('label', { class: 'field grow' }, h('span', {}, 'Equipo A'), nameA),

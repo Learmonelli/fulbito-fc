@@ -369,11 +369,11 @@ export function renderMatch(root, id) {
       ? (store.canAdmin() ? h('button', { class: 'ghost', onclick: async () => {
         if (await confirmDialog('¿Reabrir el partido para editarlo?', { okLabel: 'Reabrir' })) { store.reopenMatch(m.id); toast('Partido reabierto.'); }
       } }, '🔓 Reabrir') : null)
-      : h('button', { onclick: async () => {
+      : (store.canAdmin() ? h('button', { onclick: async () => {
         if (await confirmDialog('Al finalizar, los datos quedan bloqueados (solo se podrán agregar comentarios).', { okLabel: 'Finalizar' })) {
           store.closeMatch(m.id); toast('Partido finalizado.');
         }
-      } }, '🏁 Finalizar partido'),
+      } }, '🏁 Finalizar partido') : null),
     store.canAdmin() ? h('button', { class: 'danger', onclick: async () => {
       if (await confirmDialog('¿Eliminar este partido? No se puede deshacer.', { okLabel: 'Eliminar', danger: true })) {
         store.deleteMatch(m.id);

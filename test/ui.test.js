@@ -975,3 +975,38 @@ test('gol sin autor: suma al resultado sin darle el gol a nadie, se deshace y se
   unsub();
   store.deleteMatch(m.id);
 });
+
+test('inicio sin grupo: crear un grupo, entrar con un link o probar sin cuenta', async () => {
+  const { renderLanding } = await import('../src/ui/landing.js');
+  renderLanding(root, { cloud: { user: () => null } });
+  assert.match(root.textContent, /Crear mi grupo/);
+  assert.match(root.textContent, /Tengo el link de un grupo/);
+  assert.match(root.textContent, /Probar sin crear nada/);
+  // Un texto que no es un link ni un código se rechaza con un aviso.
+  const input = root.querySelector('input[aria-label="Link o código del grupo"]');
+  type(input, 'hola que tal');
+  root.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.match(root.textContent, /No reconozco ese link/);
+});
+
+test('con la nube: quien no es administrador no ve Finalizar, Reabrir ni Eliminar', () => {
+  const hasBtn = (re) => [...root.querySelectorAll('button')].some((b) => re.test(b.textContent));
+  const open = store.get().matches.find((m) => !m.closed);
+  const closed = store.get().matches.find((m) => m.closed);
+  assert.ok(open && closed);
+  store.attachSync({ upsert() {}, remove() {} }, { players: store.get().players, matches: store.get().matches });
+  try {
+    store.setAdmin(false);
+    renderMatch(root, open.id);
+    assert.equal(hasBtn(/Finalizar partido/), false, 'sin permiso no se puede finalizar');
+    assert.equal(hasBtn(/Eliminar/), false);
+    renderMatch(root, closed.id);
+    assert.equal(hasBtn(/Reabrir/), false);
+    store.setAdmin(true);
+    renderMatch(root, open.id);
+    assert.equal(hasBtn(/Finalizar partido/), true, 'un administrador sí');
+    assert.equal(hasBtn(/Eliminar/), true);
+  } finally {
+    store.detachSync();
+  }
+});

@@ -10,7 +10,7 @@ import { sanitizeFace, randomFace } from './pmAvatar.js';
 const cleanPositions = (list) =>
   [...new Set((Array.isArray(list) ? list : []).filter((x) => typeof x === 'string' && POS_NAME[x]))].slice(0, 6);
 
-const KEY = 'ffc_v1';
+let KEY = 'ffc_v1'; // copia local: una por grupo (ver useKey)
 const listeners = new Set();
 let errorHandler = () => {};
 const uid = () => crypto.randomUUID();
@@ -129,6 +129,13 @@ function trimAssists(m) {
 
 export const store = {
   get: () => state,
+  // Cada grupo guarda su copia en este celular con su propia clave (sirve para ver algo sin conexión).
+  useKey(key) {
+    if (key === KEY) return;
+    KEY = key;
+    state = load();
+    listeners.forEach((fn) => fn(state));
+  },
   subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   onError(fn) { errorHandler = fn; },
   match,
@@ -184,7 +191,9 @@ export const store = {
       teamAName: clean(teamAName) || (rival ? 'Nosotros' : 'Equipo A'),
       teamBName: clean(teamBName) || 'Equipo B',
       rivalName: rival ? clean(rivalName) || 'Rival' : '',
-      teamA: [], teamB: [], events: [], assists: {}, escabioTotal: 0, comments: [], closed: false,
+      // Todos los campos nacen completos (incluido bets): si la app los agregara después al cargar, un
+      // comentario en un partido finalizado se vería como "otro cambio" y la base lo rechazaría.
+      teamA: [], teamB: [], events: [], assists: {}, bets: {}, escabioTotal: 0, comments: [], closed: false,
     };
     state.matches.push(m);
     commit();
@@ -383,12 +392,19 @@ export const store = {
     commit();
     return true;
   },
-  closeMatch(id) { const m = match(id); if (!m) return false; m.closed = true; commit(); return true; },
-  reopenMatch(id) { const m = match(id); if (!m) return false; m.closed = false; commit(); return true; },
-  deleteMatch(id) { state.matches = state.matches.filter((m) => m.id !== id); commit(); },
+  // Finalizar, reabrir y borrar partidos: con la nube, solo el dueño y los admins del grupo
+  // (la base también lo exige). Sin nube (solo este navegador) no hay a quién pedirle permiso.
+  closeMatch(id) { const m = match(id); if (!m || !store.canAdmin()) return false; m.closed = true; commit(); return true; },
+  reopenMatch(id) { const m = match(id); if (!m || !store.canAdmin()) return false; m.closed = false; commit(); return true; },
+  deleteMatch(id) {
+    if (!store.canAdmin()) return false;
+    state.matches = state.matches.filter((m) => m.id !== id); commit(); return true;
+  },
 
-  // Los partidos se finalizan solos al día siguiente de su fecha.
+  // Los partidos se finalizan solos al día siguiente de su fecha. Con la nube lo hace el servidor
+  // (todas las madrugadas); acá solo lo hace un administrador, porque a los demás la base se lo rechazaría.
   autoCloseOld(today = todayStr()) {
+    if (sync && !admin) return false;
     let changed = false;
     for (const m of state.matches) {
       if (!m.closed && m.date && m.date < today) { m.closed = true; changed = true; }

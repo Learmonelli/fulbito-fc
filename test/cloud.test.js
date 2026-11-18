@@ -1,539 +1,443 @@
-// Sincronización con Supabase usando un cliente FALSO en memoria (no toca ninguna base real).
+// Nube por grupo con un cliente de Supabase FALSO en memoria (no toca ninguna base real).
+// La base falsa aplica las mismas reglas que supabase/schema.sql + interno.sql:
+//   leer: cualquiera · cargar jugadores y partidos: cualquiera (solo en grupos de modo interno)
+//   finalizar, reabrir y borrar: solo el dueño y los admins del grupo · finalizado: solo comentarios
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 const mem = new Map();
-globalThis.localStorage = {
-  getItem: (k) => (mem.has(k) ? mem.get(k) : null),
-  setItem: (k, v) => mem.set(k, String(v)),
-  removeItem: (k) => mem.delete(k),
-};
+globalThis.localStorage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k) };
+globalThis.document = { documentElement: { dataset: {} } }; // lo mínimo que pide theme.js (colores)
 
 const { store } = await import('../src/store.js');
-const { createCloud, checkKey, checkUrl, loadConfig } = await import('../src/cloud.js');
+const { createCloud, checkConfig, canEditLeague } = await import('../src/cloud.js');
 const { makeSession } = await import('../src/cloudSession.js');
+const { parseLeagueInput, leagueIdFromUrl, ligaFcLink, slugify } = await import('../src/league.js');
+const { getGroupSettings } = await import('../src/groupSettings.js');
+const { getLeaguePalette } = await import('../src/theme.js');
 const { scoreOf } = await import('../src/domain/domain.js');
 
-// ---- Supabase falso ----
-const thenable = (fn) => ({ then: (ok, ko) => Promise.resolve().then(fn).then(ok, ko) });
-function fakeSupabase(initial = { players: [], matches: [] }) {
-  const tables = { players: new Map(), matches: new Map() };
-  for (const t of Object.keys(tables)) for (const r of initial[t]) tables[t].set(r.id, { id: r.id, data: structuredClone(r) });
-  const listeners = [];
-  const rules = { denyDelete: false, failWrites: 0 };
-  const log = [];
-  const client = {
-    from(t) {
-      const tbl = tables[t];
-      if (!tbl) return { select: () => thenable(() => ({ data: null, error: { message: `relation "public.${t}" does not exist` } })) };
-      return {
-        select: () => {
-          const all = thenable(() => ({ data: [...tbl.values()].map((r) => structuredClone(r)), error: null }));
-          return { ...all, eq: (_c, id) => thenable(() => ({ data: tbl.has(id) ? [structuredClone(tbl.get(id))] : [], error: null })) };
-        },
-        upsert: (row) => thenable(() => {
-          if (rules.failWrites > 0) { rules.failWrites--; return { error: { message: 'Failed to fetch' } }; }
-          tbl.set(row.id, structuredClone(row));
-          log.push(['upsert', t, row.id]);
-          return { error: null };
-        }),
-        delete: () => ({
-          eq: (_c, id) => ({
-            select: () => thenable(() => {
-              if (rules.denyDelete) return { data: [], error: null }; // RLS: no borra y no da error
-              const had = tbl.delete(id);
-              log.push(['delete', t, id]);
-              return { data: had ? [{ id }] : [], error: null };
-            }),
-          }),
-        }),
+const CFG = { url: 'https://prueba.supabase.co', key: 'sb_publishable_test' };
+const OWNER = { id: 'u-own', email: 'dueno@mail.com', app_metadata: {} };
+const ADMIN = { id: 'u-adm', email: 'admin@mail.com', app_metadata: {} };
+const FAN = { id: 'u-fan', email: 'fan@mail.com', app_metadata: {} };
+const USERS = [OWNER, ADMIN, FAN];
+const G = 'los-jueves-abcd';
+
+const player = (id, name) => ({ id, name, nickname: '', number: '', positions: [], guest: false });
+const match = (id, extra = {}) => ({
+  id, date: '2099-01-01', mode: 'interno', teamAName: 'Claros', teamBName: 'Oscuros', rivalName: '',
+  teamA: ['p1', 'p2'], teamB: ['p3', 'p4'], events: [], assists: {}, bets: {}, escabioTotal: 0, comments: [], closed: false, ...extra,
+});
+
+function fakeDb() {
+  const db = {
+    user: null, listeners: [], writes: 0, fail: 0, failFetch: false, backups: [],
+    state: new Map(), players: new Map(), matches: new Map(),
+  };
+  db.state.set(G, { id: G, name: 'Los del jueves', owner: OWNER.id, owner_email: OWNER.email, admins: [ADMIN.email], data: { mode: 'interno', settings: { teamAName: 'Claros', teamBName: 'Oscuros', palette: 'selva' } } });
+  db.state.set('copa-xyz1', { id: 'copa-xyz1', name: 'Copa', owner: OWNER.id, owner_email: OWNER.email, admins: [], data: { teams: [] } });
+  const isAdmin = (lid) => { const lg = db.state.get(lid); return !!(db.user && lg && (db.user.id === lg.owner || lg.admins.includes(db.user.email))); };
+  const clone = (x) => structuredClone(x);
+  const emit = (table, payload) => db.listeners.filter((l) => l.table === table).forEach((l) => l.cb(payload));
+  const seed = (kind, lid, row) => db[kind].set(`${lid}|${row.id}`, { league_id: lid, id: row.id, data: clone(row) });
+  db.seed = seed;
+  db.rows = (kind, lid = G) => [...db[kind].values()].filter((r) => r.league_id === lid).map((r) => r.data);
+  db.remote = (kind, lid, row) => { // otro celular cambió algo
+    seed(kind, lid, row);
+    emit(`fulbito_${kind}`, { eventType: 'UPDATE', new: { id: row.id, league_id: lid, data: clone(row) } });
+  };
+  const view = (r) => ({ id: r.id, name: r.name, owner: r.owner, owner_email: r.owner_email, admins: clone(r.admins), mode: r.data.mode ?? null, settings: clone(r.data.settings ?? null) });
+  const netFail = () => { if (db.fail > 0) { db.fail--; return { error: { message: 'Failed to fetch' } }; } return null; };
+
+  const stateApi = {
+    select: () => {
+      const api = {
+        eq: async (c, v) => (db.failFetch ? { data: null, error: { message: 'Failed to fetch' } } : { data: [...db.state.values()].filter((r) => r[c] === v).map(view), error: null }),
+        contains: async (c, arr) => ({ data: [...db.state.values()].filter((r) => arr.every((x) => r[c].includes(x))).map(view), error: null }),
       };
+      return api;
     },
-    channel() {
-      const ch = {
-        on: (_e, filter, cb) => { listeners.push({ table: filter.table, cb }); return ch; },
-        subscribe: (cb) => { cb?.('SUBSCRIBED'); return ch; },
+    insert: (obj) => ({
+      select: async () => {
+        if (!db.user) return { error: { message: 'permission denied for table fulbito_state' } };
+        if (!/^[a-z0-9][a-z0-9-]{2,39}$/.test(obj.id)) return { error: { message: 'new row violates row-level security policy' } };
+        if (db.state.has(obj.id)) return { error: { code: '23505', message: 'duplicate key value' } };
+        db.state.set(obj.id, { id: obj.id, name: obj.name, owner: db.user.id, owner_email: db.user.email, admins: [], data: clone(obj.data) });
+        return { data: [{ id: obj.id }], error: null };
+      },
+    }),
+    update: (patch) => ({
+      eq: (_c, id) => ({
+        select: async () => {
+          const row = db.state.get(id);
+          if (!row || !isAdmin(id)) return { data: [], error: null }; // RLS: 0 filas, sin error
+          if (patch.name) row.name = patch.name;
+          if (patch.admins) row.admins = [...new Set(patch.admins)];
+          if (patch.data) row.data = clone(patch.data);
+          return { data: [view(row)], error: null };
+        },
+      }),
+    }),
+  };
+
+  const rowsApi = (kind) => ({
+    select: () => {
+      const q = { f: [], rng: null };
+      const run = () => {
+        let rows = [...db[kind].values()].filter((r) => q.f.every(([c, v]) => r[c] === v)).sort((a, b) => a.id.localeCompare(b.id));
+        if (q.rng) rows = rows.slice(q.rng[0], q.rng[1] + 1);
+        return { data: rows.map((r) => ({ id: r.id, data: clone(r.data) })), error: null };
       };
+      const api = { eq: (c, v) => { q.f.push([c, v]); return api; }, order: () => api, range: (a, b) => { q.rng = [a, b]; return api; }, then: (ok, ko) => Promise.resolve().then(run).then(ok, ko) };
+      return api;
+    },
+    insert: (obj) => ({
+      select: async () => {
+        const nf = netFail(); if (nf) return nf;
+        const lg = db.state.get(obj.league_id);
+        if (!lg || lg.data.mode !== 'interno') return { error: { code: '42501', message: 'new row violates row-level security policy' } };
+        if (db[kind].has(`${obj.league_id}|${obj.id}`)) return { error: { code: '23505', message: 'duplicate key value' } };
+        if (kind === 'matches' && obj.data.closed && !isAdmin(obj.league_id)) return { error: { code: '42501', message: 'Solo un administrador de la liga puede finalizar partidos' } };
+        seed(kind, obj.league_id, obj.data); db.writes++;
+        emit(`fulbito_${kind}`, { eventType: 'INSERT', new: { id: obj.id, league_id: obj.league_id, data: clone(obj.data) } });
+        return { data: [{ id: obj.id }], error: null };
+      },
+    }),
+    update: (patch) => {
+      const q = [];
+      const api = {
+        eq: (c, v) => { q.push([c, v]); return api; },
+        select: async () => {
+          const nf = netFail(); if (nf) return nf;
+          const rows = [...db[kind].values()].filter((r) => q.every(([c, v]) => r[c] === v));
+          if (!rows.length) return { data: [], error: null };
+          const r = rows[0];
+          if (kind === 'matches' && !isAdmin(r.league_id)) {
+            if (r.data.closed) {
+              const strip = (d) => { const c = clone(d); delete c.comments; return JSON.stringify(c); };
+              if (strip(patch.data) !== strip(r.data)) return { error: { code: '42501', message: 'El partido está finalizado: solo se pueden agregar comentarios' } };
+            } else if (patch.data.closed) return { error: { code: '42501', message: 'Solo un administrador de la liga puede finalizar partidos' } };
+          }
+          r.data = clone(patch.data); db.writes++;
+          emit(`fulbito_${kind}`, { eventType: 'UPDATE', new: { id: r.id, league_id: r.league_id, data: clone(r.data) } });
+          return { data: [{ id: r.id }], error: null };
+        },
+      };
+      return api;
+    },
+    delete: () => {
+      const q = [];
+      const api = {
+        eq: (c, v) => { q.push([c, v]); return api; },
+        select: async () => {
+          const rows = [...db[kind].values()].filter((r) => q.every(([c, v]) => r[c] === v));
+          if (!rows.length || !isAdmin(rows[0].league_id)) return { data: [], error: null }; // RLS: no borra y no da error
+          db[kind].delete(`${rows[0].league_id}|${rows[0].id}`); db.writes++;
+          return { data: [{ id: rows[0].id }], error: null };
+        },
+      };
+      return api;
+    },
+  });
+
+  const backupsApi = {
+    select: () => {
+      const q = { f: [] };
+      const api = { eq: (c, v) => { q.f.push([c, v]); return api; }, order: () => api,
+        limit: async () => ({ data: db.backups.filter((b) => q.f.every(([c, v]) => b[c] === v) && isAdmin(b.league_id)).map((b) => ({ id: b.id, kind: b.kind, created_at: b.created_at })), error: null }) };
+      return api;
+    },
+    insert: async (obj) => {
+      if (!isAdmin(obj.league_id) || obj.kind !== 'manual') return { error: { code: '42501', message: 'new row violates row-level security policy' } };
+      db.backups.push({ id: db.backups.length + 1, created_at: new Date().toISOString(), ...clone(obj) });
+      return { error: null };
+    },
+  };
+
+  db.client = {
+    auth: {
+      getSession: async () => ({ data: { session: db.user ? { user: db.user } : null } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+      signInWithPassword: async ({ email, password }) => {
+        const u = USERS.find((x) => x.email === email);
+        if (!u || password !== 'secreta123') return { data: {}, error: { message: 'Invalid login credentials' } };
+        db.user = u; return { data: { session: { user: u } }, error: null };
+      },
+      signOut: async () => { db.user = null; },
+    },
+    from: (t) => (t === 'fulbito_state' ? stateApi : t === 'fulbito_backups' ? backupsApi : rowsApi(t === 'fulbito_players' ? 'players' : 'matches')),
+    rpc: async (name, args) => {
+      if (name !== 'fulbito_restore_interno') return { error: { message: 'no existe' } };
+      if (!isAdmin(args.p_league)) return { error: { code: '42501', message: 'Solo los administradores de la liga pueden restaurar copias' } };
+      for (const kind of ['players', 'matches']) for (const k of [...db[kind].keys()]) if (k.startsWith(`${args.p_league}|`)) db[kind].delete(k);
+      args.p_players.forEach((r) => seed('players', args.p_league, r));
+      args.p_matches.forEach((r) => seed('matches', args.p_league, r));
+      return { error: null };
+    },
+    channel: () => {
+      const ch = { on: (_e, f, cb) => { db.listeners.push({ table: f.table, cb }); return ch; }, subscribe: (cb) => { cb?.('SUBSCRIBED'); return ch; } };
       return ch;
     },
-    removeChannel() { listeners.length = 0; },
+    removeChannel() { db.listeners.length = 0; },
   };
-  // Simula que otro celular cambió algo.
-  const remote = {
-    upsert(t, row) {
-      tables[t].set(row.id, { id: row.id, data: structuredClone(row) });
-      listeners.filter((l) => l.table === t).forEach((l) => l.cb({ eventType: 'UPDATE', new: { id: row.id, data: structuredClone(row) } }));
-    },
-    delete(t, id) {
-      tables[t].delete(id);
-      listeners.filter((l) => l.table === t).forEach((l) => l.cb({ eventType: 'DELETE', old: { id } }));
-    },
+  db.seedGroup = () => {
+    ['p1', 'p2', 'p3', 'p4'].forEach((id, i) => seed('players', G, player(id, `Jugador ${i + 1}`)));
+    seed('matches', G, match('m1'));
   };
-  return { client, tables, rules, log, remote, rows: (t) => [...tables[t].values()].map((r) => r.data) };
+  return db;
 }
 
-const CFG = { url: 'https://prueba.supabase.co', key: 'sb_publishable_test' };
-const noTimers = { setTimeout: () => 0, clearTimeout: () => {} };
+const noTimers = { setTimeout: () => 0, clearTimeout() {} };
 const notes = [];
-function setup(db, { confirm = async () => true } = {}) {
+function setup(db, leagueId = G) {
   const cloud = createCloud({ createClient: () => db.client, timers: noTimers });
-  const session = makeSession({ cloud, confirm, notify: (m) => notes.push(m) });
-  return { cloud, session };
+  const gone = [];
+  const session = makeSession({ cloud, notify: (m) => notes.push(m), leagueId, config: CFG, goto: (u) => gone.push(u) });
+  return { cloud, session, gone };
 }
-const player = (id, name) => ({ id, name, nickname: '', number: '', positions: [], guest: false });
+const tick = () => new Promise((r) => setTimeout(r, 0));
 
-beforeEach(() => {
-  store.detachSync();
-  store.clearAll();
-  notes.length = 0;
-  mem.delete('ffc_sbconfig');
+beforeEach(() => { store.detachSync(); store.clearAll(); mem.clear(); notes.length = 0; });
+
+test('config y links: rechaza la clave secreta, entiende links y códigos de grupo', () => {
+  assert.equal(checkConfig({ url: 'https://abc.supabase.co/rest/v1/', key: 'sb_publishable_x' }).url, 'https://abc.supabase.co');
+  assert.match(checkConfig({ url: 'https://abc.supabase.co', key: 'sb_secret_x' }).error, /SECRETA/);
+  assert.equal(parseLeagueInput('https://learmonelli.github.io/fulbito-fc/?liga=los-jueves-abcd'), 'los-jueves-abcd');
+  assert.equal(parseLeagueInput('  Los-Jueves-ABCD '), 'los-jueves-abcd');
+  assert.equal(parseLeagueInput('hola que tal'), null);
+  assert.equal(leagueIdFromUrl({ search: '?liga=los-jueves-abcd' }), 'los-jueves-abcd');
+  assert.equal(leagueIdFromUrl({ search: '?liga=<script>' }), null);
+  assert.equal(leagueIdFromUrl({ search: '' }), null);
+  assert.equal(ligaFcLink('copa-xyz1'), 'https://learmonelli.github.io/liga-fc/?liga=copa-xyz1');
+  assert.equal(ligaFcLink('main'), 'https://learmonelli.github.io/liga-fc/');
+  assert.match(slugify('Los del Jueves', () => 0), /^los-del-jueves-[a-z0-9]{4}$/);
 });
 
-test('claves: rechaza la secreta (service_role) y acepta la pública', async () => {
-  const jwt = (role) => `x.${Buffer.from(JSON.stringify({ role })).toString('base64url')}.y`;
-  assert.match(checkKey('sb_secret_abc'), /SECRETA/);
-  assert.match(checkKey(jwt('service_role')), /SECRETA/);
-  assert.equal(checkKey('sb_publishable_abc'), null);
-  assert.equal(checkKey(jwt('anon')), null);
-  assert.match(checkKey(''), /Pegá/);
-  // Clave copiada con "…" (abreviada) o comillas curvas: aviso claro en vez del error de Headers.
-  assert.match(checkKey('sb_publishable_BbY4…'), /carácter que no va \("…"\)/);
-  assert.match(checkKey('“sb_publishable_abc”'), /carácter que no va/);
-  // Espacios e invisibles al copiar se limpian solos.
-  const { cleanKey } = await import('../src/cloud.js');
-  assert.equal(cleanKey(' sb_publishable_abc\u200b\u00a0\n'), 'sb_publishable_abc');
-  assert.equal(checkKey(' sb_publishable_abc\u200b '), null);
-  // Error común: pegar la URL en el campo de la clave.
-  assert.match(checkKey('https://sylhlksbxnjwswgjohbp.supabase.co/rest/v1/'), /pegaste una URL/);
-  assert.match(checkUrl('http://x.supabase.co'), /https/);
-  assert.match(checkUrl('cualquier cosa'), /no es válida/);
-  assert.equal(checkUrl('https://x.supabase.co'), null);
+test('quién administra: el dueño y los emails de admins (sin importar mayúsculas)', () => {
+  const lg = { exists: true, owner: OWNER.id, admins: [ADMIN.email] };
+  assert.equal(canEditLeague(OWNER, lg), true);
+  assert.equal(canEditLeague({ id: 'x', email: 'ADMIN@mail.com' }, lg), true);
+  assert.equal(canEditLeague(FAN, lg), false);
+  assert.equal(canEditLeague(null, lg), false);
+  assert.equal(canEditLeague(OWNER, { exists: false }), false);
 });
 
-test('la URL de la API (.../rest/v1/) se corrige a la del proyecto', async () => {
-  const { normalizeUrl } = await import('../src/cloud.js');
-  assert.equal(normalizeUrl('https://sylhlksbxnjwswgjohbp.supabase.co/rest/v1/'), 'https://sylhlksbxnjwswgjohbp.supabase.co');
-  assert.equal(normalizeUrl('  https://abc.supabase.co/  '), 'https://abc.supabase.co');
-  assert.equal(normalizeUrl('https://abc.supabase.co'), 'https://abc.supabase.co');
-  let usedUrl = '';
-  const cloud = createCloud({ createClient: (u) => { usedUrl = u; return fakeSupabase().client; }, timers: noTimers });
-  await cloud.connect({ url: 'https://abc.supabase.co/rest/v1/', key: 'sb_publishable_x' });
-  assert.equal(usedUrl, 'https://abc.supabase.co');
-});
-
-test('una clave secreta no llega ni a crear el cliente', async () => {
-  let created = false;
-  const cloud = createCloud({ createClient: () => { created = true; return {}; }, timers: noTimers });
-  await assert.rejects(cloud.connect({ url: CFG.url, key: 'sb_secret_x' }), /SECRETA/);
-  assert.equal(created, false);
-});
-
-test('nube vacía + datos locales: pregunta y los sube', async () => {
-  const p = store.addPlayer({ name: 'Ana' });
-  const m = store.createMatch({ date: '2099-01-01' });
-  const db = fakeSupabase();
-  let asked = '';
-  const { cloud, session } = setup(db, { confirm: async (msg) => { asked = msg; return true; } });
-  assert.equal(await session.connect(CFG), true);
-  await cloud.whenIdle();
-  assert.match(asked, /La nube está vacía/);
-  assert.deepEqual(db.rows('players').map((x) => x.id), [p.id]);
-  assert.deepEqual(db.rows('matches').map((x) => x.id), [m.id]);
-  assert.equal(cloud.status(), 'ok');
-  assert.deepEqual(loadConfig(), CFG); // queda guardada para la próxima vez
-});
-
-test('nube con datos: reemplaza los locales solo si confirmás', async () => {
-  store.addPlayer({ name: 'Local' });
-  const db = fakeSupabase({ players: [player('r1', 'Remoto')], matches: [] });
-  // Si no confirmás, no se conecta y no se toca nada.
-  const no = setup(db, { confirm: async () => false });
-  assert.equal(await no.session.connect(CFG), false);
-  assert.equal(store.isSynced(), false);
-  assert.deepEqual(store.get().players.map((x) => x.name), ['Local']);
-  assert.equal(loadConfig(), null);
-  // Si confirmás, la nube manda.
-  const yes = setup(db);
-  assert.equal(await yes.session.connect(CFG), true);
-  assert.deepEqual(store.get().players.map((x) => x.name), ['Remoto']);
-  assert.deepEqual(db.rows('players').map((x) => x.name), ['Remoto']); // no se subió "Local"
-});
-
-test('cada cambio manda solo la fila que cambió', async () => {
-  const db = fakeSupabase({ players: [player('a', 'Ana'), player('b', 'Beto')], matches: [] });
-  const { cloud, session } = setup(db);
-  await session.connect(CFG);
-  await cloud.whenIdle();
-  db.log.length = 0;
-  const m = store.createMatch({ date: '2099-02-01' });
-  store.setTeamSide(m.id, 'a', 'A');
-  store.setTeamSide(m.id, 'b', 'B');
-  store.addGoal(m.id, 'A', 'a');
-  await cloud.whenIdle();
-  assert.ok(db.log.every(([op, t, id]) => op === 'upsert' && t === 'matches' && id === m.id), JSON.stringify(db.log));
-  const saved = db.rows('matches').find((x) => x.id === m.id);
-  assert.equal(scoreOf(saved, 'A'), 1);
-  // Un jugador nuevo sube a players; editar otro partido no reenvía este.
-  db.log.length = 0;
-  const g = store.addGuest(m.id, 'Primo', 'A');
-  await cloud.whenIdle();
-  assert.deepEqual(db.log.map(([op, t, id]) => [op, t, id]).sort(),
-    [['upsert', 'matches', m.id], ['upsert', 'players', g.id]].sort());
-});
-
-test('dos goles seguidos mientras se guarda el primero: llegan los dos a la nube', async () => {
-  const db = fakeSupabase({ players: [player('a', 'Ana')], matches: [] });
-  const { cloud, session } = setup(db);
-  await session.connect(CFG);
-  const m = store.createMatch({ date: '2099-02-02' });
-  store.setTeamSide(m.id, 'a', 'A');
-  for (let i = 0; i < 5; i++) store.addGoal(m.id, 'A', 'a'); // toques rápidos, sin esperar
-  await cloud.whenIdle();
-  assert.equal(scoreOf(db.rows('matches').find((x) => x.id === m.id), 'A'), 5);
-  assert.equal(cloud.pending(), 0);
-});
-
-test('si falla la red con cambios en fila, al reintentar llega la última versión', async () => {
-  const db = fakeSupabase({ players: [player('a', 'Ana')], matches: [] });
-  const { cloud, session } = setup(db);
-  await session.connect(CFG);
-  const m = store.createMatch({ date: '2099-02-03' });
-  store.setTeamSide(m.id, 'a', 'A');
-  await cloud.whenIdle();
-  db.rules.failWrites = 1;
-  store.addGoal(m.id, 'A', 'a');
-  store.addGoal(m.id, 'A', 'a');
-  await new Promise((r) => setTimeout(r, 10));
-  await cloud.retry();
-  assert.equal(scoreOf(db.rows('matches').find((x) => x.id === m.id), 'A'), 2);
-});
-
-test('con una red lenta de verdad (respuestas por timer), whenIdle espera sin colgarse', async () => {
-  // El Supabase falso responde por microtareas; este responde con setTimeout, como la red real.
-  const db = fakeSupabase({ players: [player('a', 'Ana')], matches: [] });
-  const slow = {
-    ...db.client,
-    from(t) {
-      const real = db.client.from(t);
-      return { ...real, upsert: (row) => ({ then: (ok, ko) => new Promise((r) => setTimeout(r, 15)).then(() => real.upsert(row)).then(ok, ko) }) };
-    },
-  };
-  const cloud = createCloud({ createClient: () => slow, timers: noTimers });
-  const session = makeSession({ cloud, confirm: async () => true, notify: () => {} });
-  await session.connect(CFG);
-  const m = store.createMatch({ date: '2099-02-04' });
-  store.setTeamSide(m.id, 'a', 'A');
-  store.addGoal(m.id, 'A', 'a');
-  const done = cloud.whenIdle();
-  const winner = await Promise.race([done.then(() => 'listo'), new Promise((r) => setTimeout(() => r('colgado'), 2000))]);
-  assert.equal(winner, 'listo');
-  assert.equal(scoreOf(db.rows('matches').find((x) => x.id === m.id), 'A'), 1);
-});
-
-test('partidos de la app original sin "comments" (ni otros campos): se completan sin reenviarlos', async () => {
-  // Así vienen los partidos reales desde el 06/10: sin el campo comments.
-  const legacy = { id: 'old1', date: '2026-10-06', teamA: ['a'], teamB: [], events: [{ id: 'e', side: 'A', scorerId: 'a' }], assists: {}, closed: true };
-  const bare = { id: 'old2', date: '2026-10-13', closed: true }; // caso extremo: casi nada
-  const db = fakeSupabase({ players: [player('a', 'Ana')], matches: [legacy, bare] });
-  const { cloud, session } = setup(db);
-  await session.connect(CFG);
-  await cloud.whenIdle();
-  assert.deepEqual(store.match('old1').comments, []);
-  assert.deepEqual(store.match('old2').events, []);
-  assert.deepEqual(store.match('old2').teamA, []);
-  assert.deepEqual(db.log, []); // completar campos al leer no reescribe los partidos en la nube
-  assert.equal(db.rows('matches').find((x) => x.id === 'old1').comments, undefined);
-  // Un comentario en ese partido sí se guarda, con la lista ya creada.
-  assert.equal(store.addComment('old1', 'Leandro', '¡Qué partido!'), true);
-  await cloud.whenIdle();
-  assert.equal(db.rows('matches').find((x) => x.id === 'old1').comments.length, 1);
-  // Lo mismo si llega en vivo desde la app original.
-  db.remote.upsert('matches', { id: 'old3', date: '2026-10-20', teamA: [], teamB: [], events: [], closed: true });
-  assert.deepEqual(store.match('old3').comments, []);
-  session.disconnect();
-});
-
-test('cambios de otro celular llegan en vivo y no se reenvían (sin eco)', async () => {
-  const db = fakeSupabase({ players: [player('a', 'Ana')], matches: [] });
-  const { cloud, session } = setup(db);
-  await session.connect(CFG);
-  await cloud.whenIdle();
-  db.log.length = 0;
-  let renders = 0;
-  const off = store.subscribe(() => { renders++; });
-  db.remote.upsert('players', { ...player('a', 'Ana María') });
-  assert.equal(store.get().players[0].name, 'Ana María');
-  db.remote.upsert('players', player('z', 'Zoe'));
-  assert.equal(store.get().players.length, 2);
-  db.remote.delete('players', 'z');
-  assert.equal(store.get().players.length, 1);
-  // El mismo dato otra vez (eco de nuestro propio guardado) no redibuja.
-  const before = renders;
-  db.remote.upsert('players', { ...player('a', 'Ana María') });
-  assert.equal(renders, before);
-  await cloud.whenIdle();
-  assert.deepEqual(db.log, []); // nada de lo que llegó se devolvió a la nube
-  off();
-});
-
-test('borrar sin ser admin: Supabase lo rechaza, se avisa y el partido vuelve', async () => {
-  const db = fakeSupabase({ players: [], matches: [{ id: 'm1', date: '2099-03-01', teamA: [], teamB: [], events: [], comments: [], closed: false }] });
-  db.rules.denyDelete = true;
-  const { cloud, session } = setup(db);
-  await session.connect(CFG);
-  store.deleteMatch('m1');
-  assert.equal(store.get().matches.length, 0); // se ve borrado al instante...
-  await cloud.whenIdle();
-  assert.equal(store.get().matches.length, 1); // ...pero vuelve porque la base no lo borró
-  assert.match(notes.join(' '), /hace falta ser administrador/);
-  assert.equal(db.rows('matches').length, 1);
-});
-
-test('sin conexión: el cambio queda en cola y se manda al reintentar', async () => {
-  const db = fakeSupabase({ players: [player('a', 'Ana')], matches: [] });
-  const { cloud, session } = setup(db);
-  await session.connect(CFG);
-  await cloud.whenIdle();
-  db.rules.failWrites = 1;
-  store.updatePlayer('a', { name: 'Ana Sin Red' });
-  await new Promise((r) => setTimeout(r, 10));
-  assert.equal(cloud.status(), 'error');
-  assert.match(cloud.detail(), /Sin conexión/);
-  assert.equal(cloud.pending(), 1);
-  assert.equal(db.rows('players')[0].name, 'Ana'); // todavía no llegó
-  await cloud.retry();
-  assert.equal(cloud.status(), 'ok');
-  assert.equal(cloud.pending(), 0);
-  assert.equal(db.rows('players')[0].name, 'Ana Sin Red');
-});
-
-test('con la nube conectada no se puede importar, cargar ejemplos ni borrar todo', async () => {
-  const db = fakeSupabase({ players: [player('a', 'Ana')], matches: [] });
+test('abrir un grupo: baja jugadores, partidos y ajustes; sin login nadie es administrador', async () => {
+  const db = fakeDb(); db.seedGroup();
   const { session } = setup(db);
-  await session.connect(CFG);
-  assert.equal(store.loadDemo(), false);
-  assert.equal(store.clearAll(), false);
-  assert.equal(store.importJson('{"players":[],"matches":[]}'), false);
-  assert.equal(store.get().players.length, 1);
-  assert.equal(db.rows('players').length, 1);
+  assert.equal(await session.start(), 'ok');
+  assert.equal(store.get().players.length, 4);
+  assert.equal(store.get().matches.length, 1);
+  assert.deepEqual([getGroupSettings().teamAName, getGroupSettings().teamBName], ['Claros', 'Oscuros']);
+  assert.equal(getLeaguePalette(), 'selva', 'los colores del grupo llegan con los datos');
+  assert.equal(store.isSynced(), true);
+  assert.equal(store.canAdmin(), false);
 });
 
-test('desconectar: deja de sincronizar y olvida la configuración', async () => {
-  const db = fakeSupabase({ players: [player('a', 'Ana')], matches: [] });
-  const { cloud, session } = setup(db);
-  await session.connect(CFG);
-  session.disconnect();
-  assert.equal(cloud.status(), 'off');
-  assert.equal(loadConfig(), null);
-  db.log.length = 0;
-  store.updatePlayer('a', { name: 'Solo local' });
-  await new Promise((r) => setTimeout(r, 10));
-  assert.deepEqual(db.log, []);
-  assert.equal(store.get().players[0].name, 'Solo local'); // los datos quedan en el navegador
-});
-
-test('al abrir la app se reconecta sola si había configuración (sin preguntar)', async () => {
-  store.addPlayer({ name: 'Local viejo' });
-  const db = fakeSupabase({ players: [player('r', 'Remoto')], matches: [] });
-  localStorage.setItem('ffc_sbconfig', JSON.stringify(CFG));
-  let asked = false;
-  const { session } = setup(db, { confirm: async () => { asked = true; return false; } });
-  assert.equal(await session.autoConnect(), true);
-  assert.equal(asked, false);
-  assert.deepEqual(store.get().players.map((x) => x.name), ['Remoto']);
-});
-
-test('sin nada configurado, la app usa la nube del equipo y se conecta sola', async () => {
-  const { effectiveConfig, DEFAULT_CONFIG } = await import('../src/cloud.js');
-  mem.delete('ffc_sbconfig_off');
-  assert.deepEqual(effectiveConfig(), DEFAULT_CONFIG);
-  assert.equal(checkKey(DEFAULT_CONFIG.key), null); // la preconfigurada es una clave pública
-  assert.equal(checkUrl(DEFAULT_CONFIG.url), null);
-  let usedUrl = '';
-  const db = fakeSupabase({ players: [player('r', 'Gonzalo')], matches: [] });
-  const cloud = createCloud({ createClient: (u) => { usedUrl = u; return db.client; }, timers: noTimers });
-  const session = makeSession({ cloud, confirm: async () => true, notify: () => {} });
-  assert.equal(await session.autoConnect(), true);
-  assert.equal(usedUrl, DEFAULT_CONFIG.url);
-  assert.deepEqual(store.get().players.map((x) => x.name), ['Gonzalo']);
-  session.disconnect();
-});
-
-test('si el usuario desconecta, no se reconecta sola; si pega otra nube, manda esa', async () => {
-  const { effectiveConfig, DEFAULT_CONFIG, saveConfig } = await import('../src/cloud.js');
-  mem.delete('ffc_sbconfig_off');
-  const db = fakeSupabase({ players: [player('r', 'Gonzalo')], matches: [] });
-  const { session } = setup(db);
-  await session.autoConnect();
-  session.disconnect();
-  assert.equal(effectiveConfig(), null);
-  assert.equal(await setup(db).session.autoConnect(), false);
-  // Pegar otra nube (por ejemplo la real) la guarda y le gana a la preconfigurada.
-  const other = { url: 'https://otra.supabase.co', key: 'sb_publishable_otra' };
-  saveConfig(other);
-  assert.deepEqual(effectiveConfig(), other);
-  saveConfig(null);
-  mem.delete('ffc_sbconfig_off');
-  assert.deepEqual(effectiveConfig(), DEFAULT_CONFIG);
-});
-
-test('si se corta la conexión en vivo y vuelve sola, el indicador regresa a verde', async () => {
-  const db = fakeSupabase({ players: [player('a', 'Ana')], matches: [] });
-  let report = () => {};
-  const client = { ...db.client, channel() { const ch = { on: () => ch, subscribe: (cb) => { report = cb; return ch; } }; return ch; } };
-  const cloud = createCloud({ createClient: () => client, timers: noTimers });
-  const session = makeSession({ cloud, confirm: async () => true, notify: () => {} });
-  await session.connect(CFG);
-  report('TIMED_OUT');
-  assert.equal(cloud.status(), 'error');
-  assert.match(cloud.detail(), /se reconecta sola/);
-  report('SUBSCRIBED');
-  assert.equal(cloud.status(), 'ok');
-  // Mientras está caída, guardar igual funciona y avisa que lo en vivo sigue caído.
-  report('CHANNEL_ERROR');
-  store.updatePlayer('a', { name: 'Ana 2' });
+test('cualquiera (sin login) crea partidos y carga goles; cada cambio manda solo su fila', async () => {
+  const db = fakeDb(); db.seedGroup();
+  const { session, cloud } = setup(db);
+  await session.start();
+  const m = store.createMatch({ date: '2099-02-02', teamAName: 'Claros', teamBName: 'Oscuros' });
   await cloud.whenIdle();
-  assert.equal(db.rows('players')[0].name, 'Ana 2');
-  assert.equal(cloud.status(), 'error');
-  report('SUBSCRIBED');
-  assert.equal(cloud.status(), 'ok');
-  session.disconnect();
+  assert.equal(db.rows('matches').length, 2, 'el partido nuevo se creó en la nube');
+  store.setTeamSide(m.id, 'p1', 'A'); store.setTeamSide(m.id, 'p3', 'B');
+  assert.ok(store.addGoal(m.id, 'A', 'p1'));
+  assert.ok(store.addUnknownGoal(m.id, 'B'), 'también un gol sin autor');
+  await cloud.whenIdle();
+  const row = db.rows('matches').find((r) => r.id === m.id);
+  assert.equal(scoreOf(row, 'A'), 1);
+  assert.equal(scoreOf(row, 'B'), 1);
+  assert.equal(db.rows('matches').find((r) => r.id === 'm1').events.length, 0, 'el otro partido no se tocó');
+  const p = store.addPlayer({ name: 'Nuevo Jugador' });
+  await cloud.whenIdle();
+  assert.ok(db.rows('players').some((r) => r.id === p.id), 'sumar un jugador también va a la nube');
 });
 
-// Cliente falso con Supabase Auth (login con GitHub).
-function withAuth(db, initialUser = null) {
-  let current = initialUser;
-  const subs = new Set();
-  const calls = [];
-  const auth = {
-    getSession: async () => ({ data: { session: current ? { user: current } : null } }),
-    onAuthStateChange: (fn) => { subs.add(fn); return { data: { subscription: { unsubscribe: () => subs.delete(fn) } } }; },
-    signInWithOAuth: async (opts) => { calls.push(opts); return { error: null }; },
-    signOut: async () => { current = null; subs.forEach((fn) => fn('SIGNED_OUT', null)); return { error: null }; },
-  };
-  const login = (u) => { current = u; subs.forEach((fn) => fn('SIGNED_IN', { user: u })); };
-  return { client: { ...db.client, auth }, calls, login };
-}
-
-test('isAdminUser: el email del admin o la marca app_metadata (que el usuario no puede editarse)', async () => {
-  const { isAdminUser } = await import('../src/cloud.js');
-  assert.equal(isAdminUser({ email: 'LeandroArmonelli@gmail.com' }), true);
-  assert.equal(isAdminUser({ email: 'otro@gmail.com', app_metadata: { is_admin: true } }), true);
-  assert.equal(isAdminUser({ email: 'otro@gmail.com', user_metadata: { user_name: 'learmonelli', is_admin: true } }), false); // user_metadata no cuenta
-  assert.equal(isAdminUser(null), false);
+test('quien no es administrador no puede finalizar: el store lo frena y la base también', async () => {
+  const db = fakeDb(); db.seedGroup();
+  const { session, cloud } = setup(db);
+  await session.start();
+  assert.equal(store.closeMatch('m1'), false);
+  assert.equal(store.reopenMatch('m1'), false);
+  assert.equal(store.deleteMatch('m1'), false);
+  // Aunque alguien se saltee la pantalla, la base lo rechaza, se avisa y el partido vuelve a como estaba.
+  cloud.adapter.upsert('matches', match('m1', { closed: true }));
+  await cloud.whenIdle();
+  assert.equal(db.rows('matches')[0].closed, false);
+  assert.ok(notes.some((n) => /administrador/i.test(n)), `avisa: ${notes.join(' | ')}`);
+  assert.equal(store.match('m1').closed, false, 'la pantalla vuelve a lo que de verdad quedó guardado');
 });
 
-test('admin logueado: puede editar partidos finalizados; al salir vuelve a quedar bloqueado', async () => {
-  const db = fakeSupabase({ players: [player('a', 'Ana')], matches: [{ id: 'c1', date: '2026-01-01', teamA: ['a'], teamB: [], events: [], assists: {}, comments: [], closed: true }] });
-  const a = withAuth(db, { email: 'leandroarmonelli@gmail.com' });
-  const cloud = createCloud({ createClient: () => a.client, timers: noTimers });
-  const session = makeSession({ cloud, confirm: async () => true, notify: () => {} });
-  await session.connect(CFG);
-  assert.equal(store.isAdmin(), true);
-  assert.equal(store.canAdmin(), true);
-  assert.ok(store.addGoal('c1', 'A', 'a'), 'el admin carga un gol en un partido finalizado');
-  assert.equal(store.reopenMatch('c1'), true);
-  store.closeMatch('c1');
-  await cloud.signOut();
-  assert.equal(store.isAdmin(), false);
-  assert.equal(store.canAdmin(), false); // con nube y sin admin: no reabre ni borra
-  assert.equal(store.addGoal('c1', 'A', 'a'), null); // vuelve a estar bloqueado
-  session.disconnect();
-});
-
-test('entrar con GitHub: vuelve a la misma página y, al volver, habilita el admin', async () => {
-  const db = fakeSupabase({ players: [], matches: [] });
-  const a = withAuth(db);
-  const cloud = createCloud({ createClient: () => a.client, timers: noTimers });
-  const session = makeSession({ cloud, confirm: async () => true, notify: () => {} });
-  await session.connect(CFG);
-  assert.equal(store.isAdmin(), false);
-  await cloud.signInWithGitHub();
-  assert.equal(a.calls[0].provider, 'github');
-  a.login({ email: 'otro@gmail.com' });
-  assert.equal(store.isAdmin(), false); // otra cuenta de GitHub no es admin
-  a.login({ email: 'leandroarmonelli@gmail.com' });
-  assert.equal(store.isAdmin(), true);
-  session.disconnect();
-  assert.equal(store.isAdmin(), false); // desconectar también saca el admin
-});
-
-test('GitHub sin activar: avisa ANTES de salir de la app (no deja al usuario en la página de error)', async () => {
-  const db = fakeSupabase();
-  const a = withAuth(db);
-  const cloud = createCloud({ createClient: () => a.client, timers: noTimers });
-  await cloud.connect(CFG);
-  const realFetch = globalThis.fetch;
-  let asked = '';
-  globalThis.fetch = async (url) => { asked = url; return { ok: true, json: async () => ({ external: { github: false } }) }; };
-  try {
-    await assert.rejects(cloud.signInWithGitHub(), /todavía no está activado/);
-    assert.equal(asked, 'https://prueba.supabase.co/auth/v1/settings');
-    assert.equal(a.calls.length, 0); // no se intentó ir a GitHub
-    // Activado: sí va a GitHub.
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({ external: { github: true } }) });
-    await cloud.signInWithGitHub();
-    assert.equal(a.calls.length, 1);
-    // Si la consulta falla (sin red), se intenta igual.
-    globalThis.fetch = async () => { throw new Error('sin red'); };
-    await cloud.signInWithGitHub();
-    assert.equal(a.calls.length, 2);
-  } finally {
-    globalThis.fetch = realFetch;
+test('el dueño finaliza y reabre; los admins invitados también', async () => {
+  for (const who of [OWNER, ADMIN]) {
+    store.detachSync();
+    const db = fakeDb(); db.seedGroup(); db.user = who;
+    const { session, cloud } = setup(db);
+    await session.start();
+    assert.equal(store.canAdmin(), true, `${who.email} es admin`);
+    assert.equal(store.closeMatch('m1'), true);
+    await cloud.whenIdle();
+    assert.equal(db.rows('matches')[0].closed, true);
+    assert.equal(store.reopenMatch('m1'), true);
+    await cloud.whenIdle();
+    assert.equal(db.rows('matches')[0].closed, false);
   }
 });
 
-test('si el proveedor GitHub no está activado en Supabase, lo explica', async () => {
-  const db = fakeSupabase();
-  const a = withAuth(db);
-  a.client.auth.signInWithOAuth = async () => ({ error: { message: 'Unsupported provider: provider is not enabled' } });
-  const cloud = createCloud({ createClient: () => a.client, timers: noTimers });
-  await cloud.connect(CFG);
-  await assert.rejects(cloud.signInWithGitHub(), /Authentication → Providers → GitHub/);
-});
-
-test('si faltan las tablas, avisa que hay que correr el schema.sql', async () => {
-  const db = fakeSupabase();
-  const broken = { ...db.client, from: () => ({ select: () => thenable(() => ({ data: null, error: { message: 'relation "public.players" does not exist' } })) }) };
-  const cloud = createCloud({ createClient: () => broken, timers: noTimers });
-  await assert.rejects(cloud.connect(CFG), /schema\.sql/);
-  assert.equal(cloud.status(), 'error');
-});
-
-test('los partidos viejos que siguen abiertos se cierran al conectar (como el original)', async () => {
-  const db = fakeSupabase({ players: [], matches: [{ id: 'old', date: '2020-01-01', teamA: [], teamB: [], events: [], comments: [], closed: false }] });
-  const { cloud, session } = setup(db);
-  await session.connect(CFG);
+test('partido finalizado: cualquiera puede comentar, pero no cambiar goles', async () => {
+  const db = fakeDb(); db.seedGroup(); db.seed('matches', G, match('m1', { closed: true }));
+  const { session, cloud } = setup(db);
+  await session.start();
+  assert.equal(store.addComment('m1', 'Tuti', 'Qué partidazo'), true);
   await cloud.whenIdle();
-  assert.equal(store.match('old').closed, true);
+  const row = db.rows('matches')[0];
+  assert.equal(row.comments.length, 1);
+  assert.equal(row.closed, true, 'sigue finalizado');
+  assert.equal(notes.length, 0, 'sin avisos de rechazo');
+  // Un gol en un partido finalizado: la base lo rechaza y la pantalla vuelve atrás.
+  cloud.adapter.upsert('matches', { ...store.match('m1'), events: [{ id: 'e1', side: 'A', scorerId: 'p1' }] });
+  await cloud.whenIdle();
+  assert.equal(db.rows('matches')[0].events.length, 0);
+  assert.ok(notes.some((n) => /finalizado/i.test(n)));
+});
+
+test('borrar sin ser administrador: la base no borra, se avisa y el partido vuelve', async () => {
+  const db = fakeDb(); db.seedGroup();
+  const { session, cloud } = setup(db);
+  await session.start();
+  cloud.adapter.remove('matches', 'm1');
+  await cloud.whenIdle();
+  assert.equal(db.rows('matches').length, 1);
+  assert.ok(notes.some((n) => /administrador/i.test(n)));
+});
+
+test('cambios de otro celular llegan en vivo y no se reenvían (sin eco)', async () => {
+  const db = fakeDb(); db.seedGroup();
+  const { session, cloud } = setup(db);
+  await session.start();
+  const before = db.writes;
+  db.remote('matches', G, match('m1', { events: [{ id: 'e1', side: 'A', scorerId: 'p1' }] }));
+  db.remote('players', G, player('p9', 'Llegó de otro celular'));
+  await cloud.whenIdle();
+  assert.equal(scoreOf(store.match('m1'), 'A'), 1);
+  assert.ok(store.get().players.some((p) => p.id === 'p9'));
+  assert.equal(db.writes, before, 'lo que llega de otro celular no se reenvía a la nube');
+});
+
+test('si falla la red, el cambio queda en cola y se manda al reintentar', async () => {
+  const db = fakeDb(); db.seedGroup();
+  const { session, cloud } = setup(db);
+  await session.start();
+  db.fail = 1;
+  assert.ok(store.addUnknownGoal('m1', 'A'));
+  await cloud.whenIdle();
+  assert.equal(cloud.status(), 'error');
+  assert.equal(db.rows('matches')[0].events.length, 0);
+  await cloud.retry();
+  assert.equal(cloud.status(), 'ok');
+  assert.equal(db.rows('matches')[0].events.length, 1);
+});
+
+test('links que no son de este modo: campeonatos y "main" van a Liga FC; uno inexistente avisa', async () => {
+  let r = setup(fakeDb(), 'copa-xyz1');
+  assert.equal(await r.session.start(), 'redirect');
+  assert.deepEqual(r.gone, ['https://learmonelli.github.io/liga-fc/?liga=copa-xyz1']);
+  assert.equal(store.isSynced(), false);
+  r = setup(fakeDb(), 'main');
+  assert.equal(await r.session.start(), 'redirect');
+  assert.deepEqual(r.gone, ['https://learmonelli.github.io/liga-fc/']);
+  r = setup(fakeDb(), 'no-existe-1234');
+  assert.equal(await r.session.start(), 'missing');
+  assert.equal(r.gone.length, 0);
+});
+
+test('sin conexión al abrir: avisa y deja ver la copia guardada en el celular', async () => {
+  const db = fakeDb(); db.failFetch = true;
+  const { session } = setup(db);
+  assert.equal(await session.start(), 'offline');
+  assert.ok(notes.some((n) => /No se pudo conectar/.test(n)));
+  assert.equal(store.isSynced(), false);
+});
+
+test('al abrir, el cierre automático de partidos viejos lo hace solo un administrador', async () => {
+  let db = fakeDb(); db.seedGroup(); db.seed('matches', G, match('m1', { date: '2020-01-01' }));
+  let r = setup(db);
+  await r.session.start(); await r.cloud.whenIdle();
+  assert.equal(db.rows('matches')[0].closed, false, 'sin ser admin no intenta cerrar (lo hace el servidor de madrugada)');
+  assert.equal(notes.length, 0, 'y no hay avisos de rechazo');
+
+  store.detachSync();
+  db = fakeDb(); db.seedGroup(); db.seed('matches', G, match('m1', { date: '2020-01-01' })); db.user = OWNER;
+  r = setup(db);
+  await r.session.start(); await r.cloud.whenIdle();
   assert.equal(db.rows('matches')[0].closed, true);
 });
 
+test('crear un grupo: hace falta entrar, queda como dueño y de modo interno', async () => {
+  const db = fakeDb();
+  const { session, cloud } = setup(db, null);
+  assert.equal(await session.start(), 'landing');
+  await assert.rejects(() => cloud.createLeague('Los del martes'), /entrá con tu email/);
+  await assert.rejects(() => cloud.signInWithPassword('dueno@mail.com', 'mala'), /incorrectos/);
+  await cloud.signInWithPassword('dueno@mail.com', 'secreta123');
+  await assert.rejects(() => cloud.createLeague('ab'), /al menos 3 letras/);
+  const id = await cloud.createLeague('Los del martes', {}, () => 0);
+  const row = db.state.get(id);
+  assert.equal(row.owner, OWNER.id);
+  assert.equal(row.data.mode, 'interno');
+  assert.deepEqual([row.data.settings.teamAName, row.data.settings.teamBName], ['Claros', 'Oscuros']);
+  // Un nombre repetido (mismo id sorteado) se reintenta con otro sufijo.
+  let n = 0;
+  const id2 = await cloud.createLeague('Los del martes', {}, () => (n++ < 4 ? 0 : 0.5));
+  assert.notEqual(id2, id);
+  assert.equal((await cloud.myLeagues()).length, 3, 'el grupo de siempre y los dos nuevos');
+});
 
-test('admin: email y contraseña, y la contraseña se crea ya adentro', async () => {
-  const db = fakeSupabase();
-  const calls = [];
-  const admin = { id: 'u1', email: 'leandroarmonelli@gmail.com', app_metadata: {} };
-  db.client.auth = {
-    getSession: async () => ({ data: { session: null } }),
-    onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
-    signInWithPassword: async ({ email, password }) => {
-      calls.push(['login', email]);
-      return password === 'secreta123' ? { data: { session: { user: admin } }, error: null }
-        : { data: {}, error: { message: 'Invalid login credentials' } };
-    },
-    updateUser: async ({ password }) => { calls.push(['pass', password.length]); return { error: null }; },
-  };
-  const cloud = createCloud({ createClient: () => db.client, timers: noTimers });
-  await cloud.connect(CFG);
-  await assert.rejects(cloud.setPassword('secreta123'), /Primero entrá/);
-  await assert.rejects(cloud.signInWithPassword('leandroarmonelli@gmail.com', 'mal'), /incorrectos/);
-  let seen = null;
-  cloud.onAuth((u) => { seen = u; });
-  await cloud.signInWithPassword(' leandroarmonelli@gmail.com ', 'secreta123');
-  assert.equal(cloud.user().email, 'leandroarmonelli@gmail.com');
-  assert.equal(seen?.id, 'u1');
-  await assert.rejects(cloud.setPassword('corta'), /al menos 8/);
-  await cloud.setPassword('otraSecreta1');
-  assert.deepEqual(calls, [['login', 'leandroarmonelli@gmail.com'], ['login', 'leandroarmonelli@gmail.com'], ['pass', 12]]);
+test('administradores y ajustes: los cambian el dueño y los admins, nadie más', async () => {
+  const db = fakeDb(); db.seedGroup(); db.user = FAN;
+  let r = setup(db);
+  await r.session.start();
+  await assert.rejects(() => r.cloud.setAdmins(['otro@mail.com']), /Solo los administradores/);
+  await assert.rejects(() => r.cloud.updateSettings({ teamAName: 'X' }), /Solo los administradores/);
+
+  store.detachSync();
+  db.user = OWNER; r = setup(db);
+  await r.session.start();
+  await r.cloud.setAdmins(['admin@mail.com', 'Nuevo@Mail.com', 'esto no es un mail']);
+  assert.deepEqual(db.state.get(G).admins, ['admin@mail.com', 'nuevo@mail.com'], 'se guardan los emails válidos, en minúscula');
+  await r.cloud.updateSettings({ teamAName: 'Remeras', teamBName: 'Pecheras', palette: 'noche' });
+  assert.deepEqual([getGroupSettings().teamAName, getGroupSettings().teamBName], ['Remeras', 'Pecheras']);
+  assert.equal(getLeaguePalette(), 'noche');
+  await r.cloud.renameLeague('Los del jueves FC');
+  assert.equal(db.state.get(G).name, 'Los del jueves FC');
+});
+
+test('copias de seguridad: las ven y restauran solo los admins; restaurar reemplaza jugadores y partidos', async () => {
+  const db = fakeDb(); db.seedGroup();
+  let r = setup(db);
+  await r.session.start();
+  assert.deepEqual(await r.cloud.listBackups(), [], 'quien no es admin no ve copias');
+  await assert.rejects(() => r.cloud.saveBackup({ players: [], matches: [] }), /Solo los administradores/);
+  await assert.rejects(() => r.cloud.restoreBackup({ players: [], matches: [] }), /Solo los administradores/);
+
+  store.detachSync();
+  db.user = OWNER; r = setup(db);
+  await r.session.start();
+  await r.cloud.saveBackup(r.session.backupPayload());
+  assert.equal((await r.cloud.listBackups()).length, 1);
+  await r.cloud.restoreBackup({ players: [player('q1', 'Único')], matches: [] });
+  assert.deepEqual(db.rows('players').map((p) => p.id), ['q1']);
+  assert.equal(db.rows('matches').length, 0);
+});
+
+test('modo grupo: no se puede importar ni cargar ejemplos ni borrar todo', async () => {
+  const db = fakeDb(); db.seedGroup();
+  const { session } = setup(db);
+  await session.start();
+  assert.equal(store.importJson('{"players":[],"matches":[]}'), false);
+  assert.equal(store.loadDemo(), false);
+  assert.equal(store.clearAll(), false);
+  assert.equal(store.get().players.length, 4);
 });

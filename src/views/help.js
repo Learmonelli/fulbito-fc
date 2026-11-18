@@ -11,6 +11,14 @@ export const TOPICS = [
     '3. En el partido, armá los equipos y cargá los goles a medida que pasan.',
     '4. Al terminar, elegí los premios y finalizalo. El 🏆 Ranking se actualiza solo.',
   ]],
+  ['grupo', '👥 Tu grupo, el link y los administradores', [
+    'Cada grupo es de un grupo de amigos y tiene su propio link. Con el link, cualquiera entra, suma jugadores, crea partidos, carga goles, premios, comentarios y pronósticos. No hace falta cuenta.',
+    'Para crear un grupo: en la pantalla de inicio tocá "Crear mi grupo", entrá con tu email y ponele nombre. Quedás como dueño. Después compartilo por WhatsApp desde 💾 → "🔗 Compartir link".',
+    'Solo el dueño y los administradores pueden: finalizar un partido (los que quedan abiertos se finalizan solos de madrugada), reabrirlo, borrar partidos o jugadores y restaurar copias.',
+    'Para sumar administradores: 💾 → "👥 Administradores" y escribí su email. Cada uno entra con ese email.',
+    'En 💾 también cambiás el nombre del grupo y el de los dos equipos, y ves las copias de seguridad (una automática por día).',
+    'Ya dentro, creá tu contraseña en 💾 → "🔑 Contraseña": así entrás siempre sin pedir links al mail.',
+  ]],
   ['jugadores', '👥 Jugadores', [
     'Tocá "＋ Agregar jugador": nombre, apodo, número, posiciones y su cara (piel, pelo, corte, barba, anteojos, gorra y camiseta).',
     'Los invitados son los que vienen de vez en cuando: juegan y suman, pero se muestran aparte y no pronostican.',
@@ -47,7 +55,7 @@ export const TOPICS = [
   ]],
   ['cerrar', '🏁 Finalizar un partido', [
     'Al finalizar, el partido queda bloqueado: solo se pueden agregar comentarios.',
-    'Los partidos que quedan abiertos se finalizan solos al día siguiente.',
+    'Finalizar lo hace un administrador del grupo. Los partidos que quedan abiertos se finalizan solos al día siguiente.',
   ]],
   ['datos', '💾 Datos, colores y app', [
     'En 💾 podés descargar una copia de todo, instalar la app en el celular (📲) y cargar datos de ejemplo para probar.',
