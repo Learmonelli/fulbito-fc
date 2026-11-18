@@ -226,3 +226,10 @@
 /* Instalar la app (en 💾) */
 .install-box { display: grid; gap: 6px; margin: 4px 0 12px; }
 .install-box .help-body p { margin: 0 0 6px; }
+
+/* Encabezado en celulares angostos: los botones (🎨 ❓ 🔊 💾) van en su propia línea y más chicos,
+   así ninguno queda cortado a la derecha. */
+@media (max-width: 480px) {
+  .header-tools { width: 100%; flex-wrap: nowrap; justify-content: flex-end; gap: 6px; }
+  .icon-btn, [data-theme="pixel"] .icon-btn { min-width: 0; flex: 0 1 52px; padding: 4px 6px; }
+}
