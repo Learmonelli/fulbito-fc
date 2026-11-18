@@ -914,3 +914,27 @@ test('pronósticos: un jugador por vez, cierran con el primer gol y puntúan al 
 
 
 
+
+test('colores: cinco paletas sin los de Piel Morena, se cambia y se recuerda', async () => {
+  const { PALETTES, setPalette, currentPalette, savedPalette, paletteColors } = await import('../src/theme.js');
+  assert.equal(PALETTES.length, 5);
+  assert.ok(!PALETTES.some(([, , c1, c2]) => [c1, c2].includes('#7d2233')), 'sin vinotinto de Piel Morena');
+  assert.equal(setPalette('selva'), true);
+  assert.equal(currentPalette(), 'selva');
+  assert.equal(savedPalette(), 'selva');
+  assert.equal(document.documentElement.dataset.palette, 'selva');
+  assert.equal(paletteColors().color1, '#1f8a4c');
+  assert.equal(setPalette('cualquiera'), false);
+  setPalette('clasico');
+});
+
+test('ayuda: temas plegables con la sección de pronósticos', async () => {
+  const { openHelp, TOPICS } = await import('../src/views/help.js');
+  assert.ok(TOPICS.some(([id]) => id === 'pronosticos'));
+  openHelp('ranking');
+  const dlg = document.querySelector('dialog.sheet[open]');
+  assert.ok(dlg.querySelector('[data-topic="pronosticos"]'));
+  assert.match(dlg.querySelector('[data-topic="pronosticos"]').textContent, /3 por el resultado exacto/);
+  assert.equal(dlg.querySelector('[data-topic="ranking"]').open, true, 'abre en el tema de la pestaña');
+  document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+});

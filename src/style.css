@@ -1,12 +1,15 @@
 /* Piel Morena FC v2 - estilos base (modo Moderno). El modo Pixel está en style-pixel.css. */
 :root {
-  --bg: #0c2814; --bg2: #071a0d; --card: rgba(255, 255, 255, .06); --card-2: rgba(0, 0, 0, .28);
-  --wine: #7b1e3a; --wine-2: #a32a4f; --gold: #f0c35a; --gold-ink: #2a1b00;
-  --text: #f4f1ea; --muted: #a9b9ad; --line: rgba(255, 255, 255, .13);
+  --bg: #0b1526; --bg2: #060d19; --card: rgba(255, 255, 255, .06); --card-2: rgba(0, 0, 0, .28);
+  --wine: #1f4fbf; --wine-2: #3069e0; --gold: #b8f03c; --gold-ink: #0c1a03;
+  --text: #f1f5ff; --muted: #a3b5d1; --line: rgba(255, 255, 255, .13);
   --danger: #ef4d52; --ok: #4ade80; --radius: 16px;
   --nav-h: 68px;
-  --solid: #153322; /* fondo opaco para botones de borde y pastillas: no se mezclan con el fondo */
-  --field: #0a1f10;
+  --solid: #16243d; /* fondo opaco para botones de borde y pastillas: no se mezclan con el fondo */
+  --field: #0c182c;
+  /* Colores que cambian las paletas (palettes.css) */
+  --accent-rgb: 31, 79, 191; --header-bg: rgba(6, 13, 25, .9); --nav-bg: rgba(6, 13, 25, .94);
+  --sheet-bg: #111e35; --toast-bg: #17284a; --hover: #20365c;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -15,7 +18,7 @@ body {
   margin: 0; min-height: 100vh; color: var(--text); font-size: 16px; line-height: 1.45;
   font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   background:
-    radial-gradient(900px 420px at 50% -10%, rgba(123, 30, 58, .45), transparent 65%),
+    radial-gradient(900px 420px at 50% -10%, rgba(var(--accent-rgb), .45), transparent 65%),
     repeating-linear-gradient(90deg, rgba(255, 255, 255, .02) 0 64px, transparent 64px 128px),
     linear-gradient(var(--bg), var(--bg2));
   background-attachment: fixed;
@@ -40,7 +43,7 @@ a { color: var(--gold); }
 /* Encabezado */
 .app-header {
   position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px;
-  margin: 0 -14px 10px; padding: 10px 14px; background: rgba(7, 26, 13, .9); backdrop-filter: blur(12px);
+  margin: 0 -14px 10px; padding: 10px 14px; background: var(--header-bg); backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 1.1rem; }
@@ -53,7 +56,7 @@ a { color: var(--gold); }
 /* Navegación inferior */
 .bottom-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; gap: 4px; justify-content: center;
-  padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); background: rgba(7, 26, 13, .94);
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); background: var(--nav-bg);
   backdrop-filter: blur(12px); border-top: 1px solid var(--line);
 }
 .bottom-nav a {
@@ -73,7 +76,7 @@ button:hover:not(:disabled), .btn:hover { filter: brightness(1.08); }
 button:active:not(:disabled), .btn:active { transform: scale(.97); }
 button:disabled { opacity: .45; cursor: not-allowed; }
 button.ghost, .btn.ghost { background: var(--solid); color: var(--text); border: 1px solid var(--line); }
-button.ghost:hover:not(:disabled), .btn.ghost:hover { background: #1d4430; }
+button.ghost:hover:not(:disabled), .btn.ghost:hover { background: var(--hover); }
 button.danger { background: var(--danger); color: #fff; }
 button.small { min-height: 36px; padding: 4px 12px; font-size: .9rem; }
 input, select, textarea {
@@ -116,7 +119,7 @@ fieldset.seg legend { color: var(--muted); font-size: .85rem; padding: 0; margin
 .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; background: rgba(255, 255, 255, .1); font-size: .8rem; margin: 2px 4px 2px 0; }
 
 /* Lista de partidos */
-.match-card { display: block; text-decoration: none; color: inherit; background: linear-gradient(120deg, rgba(123, 30, 58, .5), var(--card) 70%); }
+.match-card { display: block; text-decoration: none; color: inherit; background: linear-gradient(120deg, rgba(var(--accent-rgb), .5), var(--card) 70%); }
 .match-card:hover { border-color: var(--gold); }
 .mc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; font-size: .85rem; }
 .mc-top > .muted { padding-top: 3px; white-space: nowrap; }
@@ -140,7 +143,7 @@ fieldset.seg legend { color: var(--muted); font-size: .85rem; padding: 0; margin
 .back { display: inline-block; margin: 4px 0 10px; text-decoration: none; min-height: 44px; line-height: 44px; }
 
 /* Partido en vivo */
-.board { background: linear-gradient(180deg, rgba(123, 30, 58, .65), rgba(0, 0, 0, .25)); text-align: center; }
+.board { background: linear-gradient(180deg, rgba(var(--accent-rgb), .65), rgba(0, 0, 0, .25)); text-align: center; }
 .board-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
 .bteam { font-weight: 800; font-size: 1.05rem; overflow-wrap: anywhere; }
 .bscore { font-size: 3rem; line-height: 1; letter-spacing: .04em; }
@@ -168,15 +171,6 @@ fieldset.seg legend { color: var(--muted); font-size: .85rem; padding: 0; margin
 .comments { list-style: none; padding: 0; margin: 0 0 10px; }
 .comments li { padding: 8px 0; border-bottom: 1px solid var(--line); }
 .comment-form { display: grid; gap: 8px; }
-.bets { display: grid; gap: 10px; }
-.bet-pick select { width: 100%; }
-.bet-win { display: flex; }
-.bet-win .seg-btn { flex: 1; }
-.bet-score { align-items: center; gap: 8px; }
-.bet-score input { width: 80px; }
-.bet-list { list-style: none; padding: 0; margin: 0; }
-.bet-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--line); }
-.bet-list .bet-pts { margin-left: auto; }
 
 /* Ranking */
 /* Categorías del ranking: botones que bajan de renglón (sin desplegable ni scroll lateral) */
@@ -191,7 +185,7 @@ fieldset.seg legend { color: var(--muted); font-size: .85rem; padding: 0; margin
   --medal: var(--gold); --medal-ink: #2a1706;
   position: relative; flex: 1 1 0; min-width: 0; max-width: 190px; display: flex; flex-direction: column; align-items: center;
   text-align: center; padding: 6px 4px 0; border: 2px solid var(--medal); border-bottom: 0; border-radius: 18px 18px 0 0;
-  color: var(--text); background: linear-gradient(180deg, rgba(123, 30, 58, .9), rgba(123, 30, 58, .45));
+  color: var(--text); background: linear-gradient(180deg, rgba(var(--accent-rgb), .9), rgba(var(--accent-rgb), .45));
 }
 .step.pos1 { --medal: #ffd23f; }
 .step.pos2 { --medal: #d5dde8; }
@@ -265,7 +259,7 @@ abbr { text-decoration: none; cursor: help; }
 /* Hojas modales */
 dialog.sheet {
   width: min(560px, 100%); max-height: 88vh; margin: auto auto 0; padding: 0; color: var(--text);
-  background: #10281a; border: 1px solid var(--line); border-radius: 20px 20px 0 0; overflow: hidden;
+  background: var(--sheet-bg); border: 1px solid var(--line); border-radius: 20px 20px 0 0; overflow: hidden;
 }
 dialog.sheet[open] { display: flex; flex-direction: column; }
 dialog.sheet::backdrop { background: rgba(0, 0, 0, .65); }
@@ -279,7 +273,7 @@ dialog.confirm { padding: 18px; border-radius: 18px; margin: auto; }
 #toasts { position: fixed; left: 0; right: 0; bottom: calc(var(--nav-h) + 84px + env(safe-area-inset-bottom)); z-index: 60;
   display: grid; gap: 8px; justify-items: center; padding: 0 12px; pointer-events: none; }
 .toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; max-width: 520px; padding: 10px 14px; border-radius: 14px;
-  background: #1c3a27; border: 1px solid var(--gold); box-shadow: 0 8px 24px rgba(0, 0, 0, .5); animation: pop .18s ease-out; }
+  background: var(--toast-bg); border: 1px solid var(--gold); box-shadow: 0 8px 24px rgba(0, 0, 0, .5); animation: pop .18s ease-out; }
 @keyframes pop { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
@@ -306,7 +300,7 @@ dialog.confirm { padding: 18px; border-radius: 18px; margin: auto; }
 .face-editor { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
 .face-preview {
   position: sticky; top: -14px; z-index: 6; display: flex; justify-content: center; align-items: flex-end; gap: 14px;
-  margin: -14px -16px 4px; padding: 12px 0; background: var(--card-solid, #10281a);
+  margin: -14px -16px 4px; padding: 12px 0; background: var(--card-solid, var(--sheet-bg));
   border-bottom: 3px solid var(--edge, rgba(0, 0, 0, .5)); box-shadow: 0 6px 10px -6px rgba(0, 0, 0, .6);
 }
 [data-theme="pixel"] .face-preview { background: var(--card); }
@@ -335,7 +329,7 @@ dialog.confirm { padding: 18px; border-radius: 18px; margin: auto; }
 .pos-tags { margin: 2px 0 8px; }
 .num-field { width: 84px; }
 .player-form .sticky-actions { position: sticky; bottom: -20px; margin: 8px -16px -20px; padding: 10px 16px;
-  background: var(--card-solid, #10281a); border-top: 1px solid var(--line); }
+  background: var(--card-solid, var(--sheet-bg)); border-top: 1px solid var(--line); }
 [data-theme="pixel"] .player-form .sticky-actions { background: var(--card); }
 
 /* Listas y tablas dentro de panel (si no, se pierden sobre la canchita) */
@@ -428,3 +422,14 @@ dialog.confirm { padding: 18px; border-radius: 18px; margin: auto; }
 /* Administrador */
 .admin-box { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .admin-note { color: var(--gold); font-size: .9rem; }
+
+/* Pronósticos */
+.bets { display: grid; gap: 10px; }
+.bet-pick select { width: 100%; }
+.bet-win { display: flex; }
+.bet-win .seg-btn { flex: 1; }
+.bet-score { align-items: center; gap: 8px; }
+.bet-score input { width: 80px; }
+.bet-list { list-style: none; padding: 0; margin: 0; }
+.bet-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.bet-list .bet-pts { margin-left: auto; }

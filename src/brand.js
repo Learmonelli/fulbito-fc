@@ -10,7 +10,8 @@ const s = (tag, attrs = {}, ...kids) => {
 const SHIELD = 'M12 4 H88 V58 C88 82 50 108 50 108 C50 108 12 82 12 58 Z';
 let crestSeq = 0;
 
-export function crestPM(height = 52) {
+// Escudo genérico de Fulbito FC: mitades con los dos colores de la paleta y una pelota al centro.
+export function crestPM(height = 52, { color1 = '#1f4fbf', color2 = '#b8f03c' } = {}) {
   const clipId = `pm-sh-${++crestSeq}`;
   return s('svg', {
     class: 'crest', viewBox: '0 0 100 112', width: Math.round((height * 100) / 112), height,
@@ -18,14 +19,10 @@ export function crestPM(height = 52) {
   },
   s('defs', {}, s('clipPath', { id: clipId }, s('path', { d: SHIELD }))),
   s('g', { 'clip-path': `url(#${clipId})` },
-    s('rect', { x: 12, y: 4, width: 38, height: 104, fill: '#1f4fbf' }),
-    s('rect', { x: 50, y: 4, width: 38, height: 104, fill: '#b8f03c' })),
-  s('g', { transform: 'rotate(-8 50 62)' },
-    s('rect', { x: 18, y: 55, width: 14, height: 14, rx: 6, fill: '#8bc34a' }),
-    s('rect', { x: 28, y: 54, width: 36, height: 16, rx: 5, fill: '#f3ead6' }),
-    s('rect', { x: 63, y: 56, width: 17, height: 12, rx: 4, fill: '#6a2c91' })),
-  s('rect', { x: 45, y: 60, width: 12, height: 38, rx: 5, fill: '#b5703c' }),
-  s('circle', { cx: 51, cy: 60, r: 9, fill: '#b5703c' }),
+    s('rect', { x: 12, y: 4, width: 38, height: 104, fill: color1 }),
+    s('rect', { x: 50, y: 4, width: 38, height: 104, fill: color2 })),
+  s('circle', { cx: 50, cy: 54, r: 21, fill: '#ffffff', stroke: '#17110f', 'stroke-width': 4 }),
+  s('path', { d: 'M50 44 L59 50.5 L55.5 61 L44.5 61 L41 50.5 Z', fill: '#17110f' }),
   s('path', { d: SHIELD, fill: 'none', stroke: '#17110f', 'stroke-width': 5 }));
 }
 

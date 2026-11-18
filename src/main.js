@@ -2,9 +2,10 @@ import '@fontsource/press-start-2p/400.css';
 import '@fontsource/vt323/400.css';
 import './style.css';
 import './style-pixel.css';
+import './palettes.css';
 import { h } from './dom.js';
 import { store } from './store.js';
-import './theme.js';
+import { PALETTES, setPalette, currentPalette, paletteColors, onPalette } from './theme.js';
 import { crestPM, pitchBackground } from './brand.js';
 import { toast } from './ui/toast.js';
 import { openSheet, confirmDialog } from './ui/sheet.js';
@@ -16,6 +17,7 @@ import { renderPlayers } from './views/players.js';
 import { makeSession } from './cloudSession.js';
 import { cloudSection, statusChip } from './ui/cloudPanel.js';
 import { installSection } from './ui/install.js';
+import { openHelp } from './views/help.js';
 
 const session = makeSession();
 
@@ -39,7 +41,22 @@ function route() {
 // ---- Encabezado ----
 const sfxBtn = h('button', { class: 'ghost small icon-btn', onclick: () => { setMuted(!isMuted()); paintHeader(); } });
 const dataBtn = h('button', { class: 'ghost small icon-btn', 'aria-label': 'Datos y copias de seguridad', onclick: openData }, '💾');
-const crestSlot = h('span', { class: 'brand-crest' }, crestPM(46));
+const crestSlot = h('span', { class: 'brand-crest' });
+const paintCrest = () => crestSlot.replaceChildren(crestPM(46, paletteColors()));
+const lookBtn = h('button', { class: 'ghost small icon-btn', 'aria-label': 'Colores de la app', title: 'Colores', onclick: () => openLook() }, '🎨');
+const helpBtn = h('button', { class: 'ghost small icon-btn', 'aria-label': 'Ayuda: cómo se usa', title: 'Ayuda', onclick: () => openHelp(route().tab) }, '❓');
+
+// Colores: cinco paletas; la elegida queda guardada en este celular.
+function openLook() {
+  openSheet('🎨 Colores', (close) => h('div', { class: 'stack' },
+    h('div', { class: 'palette-grid', role: 'group', 'aria-label': 'Paleta de colores' }, PALETTES.map(([id, label, c1, c2]) => h('button', {
+      class: `palette-opt ${id === currentPalette() ? 'on' : ''}`, 'aria-pressed': String(id === currentPalette()), 'data-palette-id': id,
+      onclick: () => { setPalette(id); close(); openLook(); },
+    }, h('span', { class: 'palette-dots', 'aria-hidden': 'true' }, h('span', { style: `background:${c1}` }), h('span', { style: `background:${c2}` })), label))),
+    h('p', { class: 'muted small-note' }, 'Queda guardado en este celular.'),
+    h('div', { class: 'row end' }, h('button', { class: 'ghost', onclick: close }, 'Listo'))));
+}
+onPalette(() => { paintCrest(); paint(); });
 
 function paintHeader() {
   sfxBtn.textContent = isMuted() ? '🔇' : '🔊';
@@ -118,9 +135,10 @@ app.append(
     h('div', { class: 'brand' }, crestSlot,
       h('div', {}, h('p', { class: 'brand-name' }, 'Fulbito FC'), h('p', { class: 'brand-sub muted' }, 'Estadísticas del fútbol entre amigos'))),
     h('div', { class: 'header-tools' },
-      statusChip(session, openData), sfxBtn, dataBtn)),
+      statusChip(session, openData), lookBtn, helpBtn, sfxBtn, dataBtn)),
   main, nav);
 paintHeader();
+paintCrest();
 paint();
 session.autoConnect(); // si ya había una nube configurada, se reconecta sola
 
